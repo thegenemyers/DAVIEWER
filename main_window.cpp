@@ -2669,7 +2669,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     gridBox->setFixedSize(20,20);
     gridBox->setIcon(QIcon(QPixmap(16,16)));
 
-  gridLabel = new QLabel(tr("Show grid"));
+  gridLabel = new QLabel(tr("Grid lines"));
 
   gridCheck = new QCheckBox();
     gridCheck->setFixedWidth(30);
@@ -2681,7 +2681,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     haloBox->setFixedSize(20,20);
     haloBox->setIcon(QIcon(QPixmap(16,16)));
 
-  haloLabel = new QLabel(tr("Hilight Hover"));
+  haloLabel = new QLabel(tr("Hilight hover"));
 
   haloCheck = new QCheckBox();
     haloCheck->setFixedWidth(30);
