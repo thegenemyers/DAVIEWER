@@ -16,16 +16,22 @@ extern int PANEL_SIZE;        //  Actual panel size, must be a multiple of getMo
 #define DATA_MASK 0x1fff  //  Get btip value
 #define DRAW_FLAG 0x2000  //  This LA has been drawn (set/reset during paint event)
 #define INIT_FLAG 0x4000  //  This LA is the first in a chain
-#define LINK_FLAG 0x8000  //  This LA is linked to a following LA (in .level field)
+#define LINK_FLAG 0x8000  //  This LA is linked to a following LA (via .level field)
 #define DRAW_OFF  0xdfff  //  ~ DRAW_FLAG
 
+#define DATA_ETIP 0x3fff  //  Get btip value
+#define STRT_FLAG 0x8000  //  Chain start
+#define SUCC_FLAG 0x4000  //  Chain next
+
 typedef struct
-  { int   bread;           //  (B-read << 1) | complement flag
+  { int   bread;           //  I = 1: (B-read << 1) | complement flag
+                           //  IL = 01: index of last LA in chain
+                           //  IL = 00: index of first LA in chain
+    int   level;           //  L = 1: index of next LA in chain
+                           //  L = 0: level at which to draw chain
     short btip, etip;      //  length of tips (or 0)
     int   abpos, aepos;    //  coords of alignment
     int   bbpos, bepos;
-    int   level;           //  first in a linked group and level to draw at if >= 0, otherwise
-                           //    it is in group for which -(level+1) is the first.
     int64 toff;            // Index in input file of trace
   } LA;
 

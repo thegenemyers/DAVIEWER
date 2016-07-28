@@ -1181,6 +1181,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                     if (as >= 0 && doBridge)
                       { cPen.setColor(palette->branchColor);
                         painter.setPen(cPen);
+                        xf = x1 + align[c].aepos*hbp;
                         painter.drawLine(xf,y,xs,y);
                         if (bs > as)
                           { fact = stfact*(bs-as) / (as+10.);
@@ -1230,7 +1231,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                       }
                     align[f].btip |= DRAW_FLAG;
                   }
-                f = align[c].etip;
+                f = (align[c].etip & DATA_ETIP);
                 if (f > 0)
                   { xf = x1 + align[c].aepos*hbp;
                     xs = xf + f*hbp;

@@ -92,7 +92,10 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
     { if ((LOCAL[i].btip & INIT_FLAG) != 0)
         { b = LOCAL[i].bread;
           for (j = i; (LOCAL[j].btip & LINK_FLAG) != 0; j = LOCAL[j].level)
-            LOCAL[j].bread = b;
+            { LOCAL[j].bread = b;
+              LOCAL[j].btip &= DATA_MASK;
+            }
+          LOCAL[j].bread = b;
         }
       LOCAL[i].btip &= DATA_MASK;
     }
@@ -105,78 +108,88 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
       }
 
   else
-    for (i = pile->first; i < last; i = j)
-      { b = LOCAL[i].bread;
-        low = i;
-        for (j = i+1; LOCAL[j].bread == b; j++)
-          { for (k = j-1; k >= low; k--)
-              { int agap, bgap, pair;
+    { if ((LOCAL[pile->first].etip & STRT_FLAG) != 0)
+        for (i = pile->first+1; i < last; i++)
+          { if ((LOCAL[i].etip & SUCC_FLAG) != 0)
+              { LOCAL[i].btip |= LINK_FLAG;
+                LOCAL[i].level = i-1;
+              }
+          }
 
-                if ((LOCAL[k].btip & INIT_FLAG) != 0)
-                  continue;
-
-                agap = LOCAL[j].abpos - LOCAL[k].aepos;
-                if (agap < 0)
-                  { if (nolap)
+      else
+        for (i = pile->first; i < last; i = j)
+          { b = LOCAL[i].bread;
+            low = i;
+            for (j = i+1; LOCAL[j].bread == b; j++)
+              { for (k = j-1; k >= low; k--)
+                  { int agap, bgap, pair;
+  
+                    if ((LOCAL[k].btip & INIT_FLAG) != 0)
                       continue;
-                  }
-                else if (agap < 20000)
-                  { if (nolink)
-                      continue;
-                  }
-                else
-                  { low = k+1;
-                    continue;
-                  }
-
-                bgap = LOCAL[j].bbpos - LOCAL[k].bepos;
-                if (-300 < agap)
-                  { bgap += 400;
-                    agap += 400;
-                    pair = (agap*comp_factor < bgap && bgap < agap*expn_factor);
-                  }
-                else
-                  pair = (agap*comp_factor > bgap && bgap > agap*expn_factor);
-                if (pair)
-                  { LOCAL[j].btip |= LINK_FLAG;
-                    LOCAL[j].level = k;
-                    if (LOCAL[j].aepos <= LOCAL[j].abpos)
-                      LOCAL[j].btip |= INIT_FLAG;
-                    break;
+  
+                    agap = LOCAL[j].abpos - LOCAL[k].aepos;
+                    if (agap < 0)
+                      { if (nolap)
+                          continue;
+                      }
+                    else if (agap < 20000)
+                      { if (nolink)
+                          continue;
+                      }
+                    else
+                      { low = k+1;
+                        break;
+                      }
+  
+                    bgap = LOCAL[j].bbpos - LOCAL[k].bepos;
+                    if (-300 < agap)
+                      { bgap += 400;
+                        agap += 400;
+                        pair = (agap*comp_factor < bgap && bgap < agap*expn_factor);
+                      }
+                    else
+                      pair = (agap*comp_factor > bgap && bgap > agap*expn_factor);
+                    if (pair)
+                      { LOCAL[j].btip |= LINK_FLAG;
+                        LOCAL[j].level = k;
+                        if (LOCAL[j].aepos <= LOCAL[k].aepos)
+                          LOCAL[j].btip |= INIT_FLAG;
+                        break;
+                      }
                   }
               }
           }
 
-        for (k = i; k < j; k++)
-          if ((LOCAL[k].btip & LINK_FLAG) == 0)
-            { LOCAL[k].btip  |= INIT_FLAG;
-              LOCAL[k].abpos -= (LOCAL[k].btip & DATA_MASK);
-              rail[n++] = k;
-            }
-	  else
-            { h = LOCAL[k].level;
-              while ((LOCAL[h].btip & LINK_FLAG) != 0)
-                h = LOCAL[h].level;
-              LOCAL[h].level = k;
-              LOCAL[h].btip |= LINK_FLAG;
-              LOCAL[k].btip &= DATA_MASK;
-            }
+      for (k = pile->first; k < last; k++)
+        if ((LOCAL[k].btip & LINK_FLAG) == 0)
+          { LOCAL[k].btip  |= INIT_FLAG;
+            LOCAL[k].abpos -= (LOCAL[k].btip & DATA_MASK);
+            rail[n++] = k;
+          }
+        else
+          { h = LOCAL[k].level;
+            while ((LOCAL[h].btip & LINK_FLAG) != 0)
+              h = LOCAL[h].level;
+            LOCAL[h].level = k;
+            LOCAL[h].btip |= LINK_FLAG;
+            LOCAL[k].btip &= DATA_MASK;
+          }
 
-        for (k = i; k < j; k++)
-          if ((LOCAL[k].btip & INIT_FLAG) != 0)
-            { h = k;
-              while ((LOCAL[h].btip & LINK_FLAG) != 0)
-                h = LOCAL[h].level;
-              if (k != h)
-                { r = LOCAL[k].level;
-                  while (r != h)
-                    { LOCAL[r].bread = h;
-                      r = LOCAL[r].level;
-                    }
-                  LOCAL[h].bread = k;
-                }
-            }
-      }
+      for (k = pile->first; k < last; k++)
+        if ((LOCAL[k].btip & INIT_FLAG) != 0)
+          { h = k;
+            while ((LOCAL[h].btip & LINK_FLAG) != 0)
+              h = LOCAL[h].level;
+            if (k != h)
+              { r = LOCAL[k].level;
+                while (r != h)
+                  { LOCAL[r].bread = h;
+                    r = LOCAL[r].level;
+                  }
+                LOCAL[h].bread = k;
+              }
+          }
+    }
 
   qsort(rail,n,sizeof(int),LEFTMOST);
 
@@ -191,10 +204,10 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
         rtop = r+1;
 
       LOCAL[j].abpos += (LOCAL[j].btip & DATA_MASK);
-      max = LOCAL[j].aepos + LOCAL[j].etip;
+      max = LOCAL[j].aepos + (LOCAL[j].etip & DATA_ETIP);
       while ((LOCAL[j].btip & LINK_FLAG) != 0)
         { j = LOCAL[j].level;
-          v = LOCAL[j].aepos + LOCAL[j].etip;
+          v = LOCAL[j].aepos + (LOCAL[j].etip & DATA_ETIP);
           if (v > max)
             max = v;
         }
@@ -362,6 +375,11 @@ static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
       local[n].abpos = ovl.path.abpos - btip;
       local[n].aepos = ovl.path.aepos + etip;
       local[n].toff  = ftell(input);
+      if (CHAIN_START(ovl.flags))
+        local[n].etip |= STRT_FLAG;
+      if (CHAIN_NEXT(ovl.flags))
+        local[n].etip |= SUCC_FLAG;
+   
       n += 1;
 
       tlen = TBYTES*ovl.path.tlen;
@@ -476,7 +494,7 @@ static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
             for (k = b; k <= e; k++)
               plists[count[k]++] = j;
             local[j].abpos += local[j].btip;
-            local[j].aepos -= local[j].etip;
+            local[j].aepos -= (local[j].etip & DATA_ETIP);
           }
       }
 
