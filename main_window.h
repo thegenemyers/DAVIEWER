@@ -183,6 +183,14 @@ typedef struct
     int    qualBad;
     bool   qualonB;
 
+    bool   profVis;
+    bool   profqv;
+    int    profMode;
+    QColor profColor[5];
+    QColor profHue[3];
+    int    profLow;
+    int    profHgh;
+
     int       nmasks;
     bool        showTrack[MAX_TRACKS];
     QColor      trackColor[MAX_TRACKS];
@@ -228,9 +236,10 @@ public:
   bool readView(Palette_State &, QString &);
 
   void restoreLayout();
-  void loadTracks(Palette_State &, DataModel *);
-
+  int  loadTracks(Palette_State &, DataModel *);
   int  liveCount();
+
+  void symmetricDB(bool);
 
 private slots:
   void backChange();
@@ -246,6 +255,8 @@ private slots:
   void matchTriChange();
   void qualRampChange();
   void qualTriChange();
+  void profRampChange();
+  void profTriChange();
   void trackChange();
 
   void stretchCheck();
@@ -254,6 +265,8 @@ private slots:
   void matchBadCheck();
   void qualGoodCheck();
   void qualBadCheck();
+  void profLowCheck();
+  void profHghCheck();
 
   void activateGrid(int);
   void activateHalo(int);
@@ -264,6 +277,7 @@ private slots:
 
   void activateMatchQV(int);
   void activateQualQV(int);
+  void activateRepProfile(int);
   void enforceMatchOff(int);
   void activateTracks(int);
 
@@ -348,6 +362,25 @@ private:
     int             qualGood;
     int             qualBad;
     QCheckBox      *qualonB;
+
+  QWidget *profPanel;
+  bool     profVis;
+  QCheckBox      *profCheck;
+    QLabel         *profLabel;
+    QLabel         *profLabelScale;
+    QRadioButton   *profRadioScale;
+    QLabel         *profLabelTri;
+    QRadioButton   *profRadioTri;
+    QStackedLayout *profStack;
+    QToolButton    *profBox[5];
+    QColor          profColor[5];
+    QToolButton    *profLev[3];
+    QColor          profHue[3];
+    QLabel         *profLevLabel[3];
+    QLineEdit      *profBot;
+    QLineEdit      *profTop;
+    int             profLow;
+    int             profHgh;
 
   TrackWidget *maskPanel;
   int          nmasks;

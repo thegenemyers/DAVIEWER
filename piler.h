@@ -60,6 +60,7 @@ typedef struct
     int      tbytes; // Trace unit isze
 
     HITS_TRACK *qvs; // Quality track (if != NULL)
+    HITS_TRACK *prf; // Repeat Profile track (if != NULL)
 
     int      *panels; // plist[panel[i],panel[i+1) is the list of LAs covering a
     int      *plists; //   part of panel i.

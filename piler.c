@@ -273,7 +273,6 @@ static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
   FILE      *input;
   HITS_READ *reads;
 
-  int   lmax;
   LA   *local;
   Pile *pile;
   void *tbuffer;
@@ -301,8 +300,17 @@ static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
     TBYTES = sizeof(uint16);
   PANEL_SIZE = ((PANEL_TARGET-1)/TRACE_SPACING+1)*TRACE_SPACING;
 
-  lmax  = novl*((1.*(last-first))/MODEL.db1->nreads) + 10000;
-  local = (LA *) Malloc(lmax*sizeof(LA),"Allocating alignments");
+  Read_Overlap(input,&ovl);
+  if (ovl.aread >= first)
+    MODEL.first = first = ovl.aread;
+  else
+    while (ovl.aread < first)
+      { fseek(input,TBYTES*ovl.path.tlen,SEEK_CUR);
+        Read_Overlap(input,&ovl);
+        novl -= 1;
+      }
+
+  local = (LA *) Malloc(novl*sizeof(LA),"Allocating alignments");
   if (local == NULL)
     return (-1);
   pile  = (Pile *) Malloc(((last-first)+1)*sizeof(Pile),"Allocating piles");
@@ -311,12 +319,6 @@ static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
       return (-1);
     }
   pile -= first;
-
-  Read_Overlap(input,&ovl);
-  while (ovl.aread < first)
-    { fseek(input,TBYTES*ovl.path.tlen,SEEK_CUR);
-      Read_Overlap(input,&ovl);
-    }
 
   npan = nspl = nlas = 0;
   pos  = PILE_SPACING/2;
@@ -354,16 +356,6 @@ static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
           pos += reads[a].rlen + PILE_SPACING;
         }
 
-      if (n >= lmax)
-        { LA *temp;
-
-          lmax = 1.2*n + 10000;
-          temp = (LA *) Realloc(local,lmax*sizeof(LA),"Reallocating alignments");
-          if (temp == NULL)
-            goto error;
-          local = temp;
-        }
-      
       local[n].bread = (ovl.bread << 1);
       if (COMP(ovl.flags))
         local[n].bread |= 0x1;
@@ -392,39 +384,43 @@ static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
       if (Read_Overlap(input,&ovl))
         break;
     }
-  while (a < last)
-    { int j, b, e, p;
 
-      if (a >= first)
-        { if (reads[a].rlen < PANEL_FUDGE)
-            p = 0;
-          else
-            p = ((reads[a].rlen-PANEL_FUDGE) / PANEL_SIZE);
-          for (j = m; j < n; j++)
-            { b = local[j].abpos / PANEL_SIZE;
-              e = (local[j].aepos-1) / PANEL_SIZE;
-              if (e > p)
-                e = p;
-              nlas += e-b;
-            }
-          nspl += 1;
-          npan += p+1;
-        }
+  { int j, b, e, p;
 
-      a += 1;
-      pile[a].first  = n;
-      pile[a].where  = pos;
-      pile[a].offset = ftello(input) - OvlIOSize;
-      pile[a].panels = npan;
-      if (n-m > omax)
-        omax = n-m;
-      m  = n;
-      if (a == last)
-        pile[a].where -= PILE_SPACING/2;
-      else
-        pos += reads[a].rlen + PILE_SPACING;
-    }
-  pile[last].offset += OvlIOSize;
+    if (a < last-1)
+      { MODEL.last = last = a+1;
+        pile = (Pile *) Realloc(pile+first,((last-first)+1)*sizeof(Pile),"Reallocating piles");
+        pile -= first;
+      }
+
+    if (a >= first)
+      { if (reads[a].rlen < PANEL_FUDGE)
+          p = 0;
+        else
+          p = ((reads[a].rlen-PANEL_FUDGE) / PANEL_SIZE);
+        for (j = m; j < n; j++)
+          { b = local[j].abpos / PANEL_SIZE;
+            e = (local[j].aepos-1) / PANEL_SIZE;
+            if (e > p)
+              e = p;
+            nlas += e-b;
+          }
+        nspl += 1;
+        npan += p+1;
+      }
+
+    pile[last].first  = n;
+    pile[last].where  = pos;
+    pile[last].offset = ftello(input) - OvlIOSize;
+    pile[last].panels = npan;
+    if (n-m > omax)
+      omax = n-m;
+    pile[last].where  -= PILE_SPACING/2;
+    pile[last].offset += OvlIOSize;
+
+    if (n < novl)
+      local = (LA *) Realloc(local,n*sizeof(LA),"Allocating alignments");
+  }
 
   { LA   *temp;
 
@@ -676,6 +672,18 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
 
   { int kind;
 
+    if (Check_Track(MODEL.db1,"prof",&kind) > -2)
+      { MODEL.prf = Load_Track(MODEL.db1,"prof");
+        if (MODEL.prf == NULL)
+          { Close_DB(MODEL.db1);
+            if (MODEL.db2 != MODEL.db1)
+              Close_DB(MODEL.db2);
+            return (Ebuffer);
+          }
+      }
+    else
+      MODEL.prf = NULL;
+
     if (Check_Track(MODEL.db1,"qual",&kind) > -2)
       { MODEL.qvs = Load_Track(MODEL.db1,"qual");
         if (MODEL.qvs == NULL)
@@ -711,7 +719,7 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
       }
     MODEL.db1->tracks = u;
 
-    for (t = MODEL.db1->tracks; t != MODEL.qvs; t = t->next)
+    for (t = MODEL.db1->tracks; t != MODEL.qvs && t != MODEL.prf; t = t->next)
       { anno = (int64 *) (t->anno);
         for (j = 0; j <= MODEL.db1->nreads; j++) 
           anno[j] >>= 2;
