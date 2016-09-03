@@ -1652,16 +1652,16 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                             { ae = ae+tspace;
                               xf = x1 + ae*hbp;
                               if (ae-ab >= 20)
-                                vl = (trace[pt]*40.)/((ae-ab) + trace[pt+1]);
+                                vl = (trace[pt]*200.)/((ae-ab) + trace[pt+1]);
                               else
-                                vl = 19;
+                                vl = 100;
                               pt += 2;
                               if (vl <= lowT)
                                 painter.setPen(mPen[0]);
                               else if (vl >= hghT)
-                                painter.setPen(mPen[1]);
-                              else
                                 painter.setPen(mPen[2]);
+                              else
+                                painter.setPen(mPen[1]);
                               painter.drawLine(xs,y,xf,y);
                               ab = ae;
                               xs = xf;
@@ -1671,16 +1671,16 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                               if (ae > aend)
                                 { xf = x1 + aend*hbp;
                                   if (aend-ab >= 20)
-                                    vl = (trace[pt]*40.)/((aend-ab) + trace[pt+1]);
+                                    vl = (trace[pt]*200.)/((aend-ab) + trace[pt+1]);
                                   else
-                                    vl = 19;
+                                    vl = 100;
                                   pt += 2;
                                   if (vl <= lowT)
                                     painter.setPen(mPen[0]);
                                   else if (vl >= hghT)
-                                    painter.setPen(mPen[1]);
-                                  else
                                     painter.setPen(mPen[2]);
+                                  else
+                                    painter.setPen(mPen[1]);
                                   painter.drawLine(xs,y,xf,y);
                                   break;
                                 }
@@ -1690,9 +1690,9 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                               if (vl <= lowT)
                                 painter.setPen(mPen[0]);
                               else if (vl >= hghT)
-                                painter.setPen(mPen[1]);
-                              else
                                 painter.setPen(mPen[2]);
+                              else
+                                painter.setPen(mPen[1]);
                               painter.drawLine(xs,y,xf,y);
                               ab = ae;
                               xs = xf;
