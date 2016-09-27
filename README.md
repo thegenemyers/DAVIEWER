@@ -1,8 +1,8 @@
 
 # The DaViewer: A Qt-based alignment pile viewer
 
-## _Author:  Gene Myers
-## _First:   June 1, 2016
+## Author:  Gene Myers
+## First:   June 1, 2016
 
 In brief, DaViewer allows you to view any subset of the information in a given .las
 file of local alignments computed by the daligner or the forth coming damapper, and any
