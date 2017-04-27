@@ -2674,6 +2674,12 @@ void PaletteDialog::putState(Palette_State &state)
       profStack->setCurrentIndex(1);
     }
 
+  if (state.matchVis)
+    matchCheck->setEnabled(true);
+  else
+    { matchCheck->setChecked(false);
+      matchCheck->setEnabled(false);
+    }
   if (state.qualVis)
     { qualPanel->setVisible(true);
       qualVis = true;
@@ -3713,6 +3719,7 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
   for (j = 0; j < 3; j++)
     state.profHue[j].setRgb(profTri[j]);
 
+  state.matchVis = matchCheck->isEnabled();
   state.qualVis = qualVis;
   state.profVis = profVis;
 
@@ -3841,6 +3848,7 @@ bool PaletteDialog::readView(Palette_State &state, QString &view)
     state.neutralColor.setRgb(settings.value("neutral").toUInt());
     state.compressColor.setRgb(settings.value("compress").toUInt());
 
+    state.matchVis  = true;
     state.matchqv   = settings.value("matchQV").toBool();
     state.matchMode = settings.value("matchMode").toInt();
     for (j = 0; j < 10; j++)
@@ -4805,6 +4813,7 @@ int PaletteDialog::loadTracks(Palette_State &state, DataModel *model)
           j += 1;
         }
     state.nmasks  = j;
+    state.matchVis = (model->tspace != 0);
     state.qualVis = (model->qvs != NULL);
     state.profVis = (model->prf != NULL);
   settings.endGroup();

@@ -167,6 +167,7 @@ typedef struct
     QColor neutralColor;
     QColor compressColor;
 
+    bool   matchVis;
     bool   matchqv;
     int    matchMode;
     QColor matchColor[10];

@@ -298,7 +298,10 @@ static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
     TBYTES = sizeof(uint8);
   else
     TBYTES = sizeof(uint16);
-  PANEL_SIZE = ((PANEL_TARGET-1)/TRACE_SPACING+1)*TRACE_SPACING;
+  if (TRACE_SPACING > 0)
+    PANEL_SIZE = ((PANEL_TARGET-1)/TRACE_SPACING+1)*TRACE_SPACING;
+  else
+    PANEL_SIZE = ((PANEL_TARGET-1)/100+1)*100;
 
   Read_Overlap(input,&ovl);
   if (ovl.aread >= first)
