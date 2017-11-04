@@ -4594,6 +4594,7 @@ MainWindow::MainWindow(MainWindow *origin) : QMainWindow()
 
       paletteDialog->putState(palette);
       openDialog->putState(dataset);
+      setWindowTitle(windowTitle());
 
       show();
     }
@@ -4851,6 +4852,7 @@ void MainWindow::openFiles()
               frames[j]->paletteDialog->symmetricDB(! dataset.asym);
               frames[j]->paletteDialog->putState(palette);
               frames[j]->update();
+              frames[j]->setWindowTitle(tr("DaViewer - %1").arg(dataset.lasText));
             }
         }
     }

@@ -525,6 +525,32 @@ error:
   return (1);
 }
 
+static int scanLAS(FILE *input, int *first, int *last)
+{ Overlap _ovl, *ovl = &_ovl;
+  int     j, novl, tlen;
+
+  fread(&novl,sizeof(int64),1,input);
+  fread(&TRACE_SPACING,sizeof(int),1,input);
+  if (TRACE_SPACING <= TRACE_XOVR && TRACE_SPACING != 0)
+    TBYTES = sizeof(uint8);
+  else
+    TBYTES = sizeof(uint16);
+
+  Read_Overlap(input,ovl);
+  tlen = ovl->path.tlen;
+  fseeko(input,tlen*TBYTES,SEEK_CUR);
+  *first = *last = ovl->aread;
+
+  for (j = 1; j < novl; j++)
+    { Read_Overlap(input,ovl);
+      tlen = ovl->path.tlen;
+      fseeko(input,tlen*TBYTES,SEEK_CUR);
+      *last = ovl->aread;
+    }
+
+  return (novl == 0);
+}
+
 static void OPEN_MASKS(char *path, char *extn)
 { char *dot, *dot2;
   FILE *data, *anno;
@@ -578,25 +604,29 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
     }
   UNDEFINED = 1;
 
-  { char *p, *eptr, *las;
-    int   i, part, term, nfiles, nblocks, cutoff, all, oindx;
-    int   db_first, db_last;
+  { int   i, nfiles, nblocks, cutoff, all, oindx;
     int64 size;
+    int   la_first, la_last;
+    int   db_first, db_last;
+    FILE *input;
 
-    las = Root(Alas,".las");
-    if (las == NULL)
-      return (Ebuffer);
-    p = rindex(las,'.');
-    if (p != NULL)
-      { part = strtol(p+1,&eptr,10);
-        if (*eptr != '\0' || eptr == p+1)
-          part = 0;
+    input = fopen(Alas,"r");
+    if (input == NULL)
+      { if (rindex(Alas,'/') != NULL)
+          Alas = rindex(Alas,'/')+1;
+        EPRINTF(EPLACE,"%s: Cannot open file %s\n",Prog_Name,Alas);
+        return (Ebuffer);
       }
-    else
-      part = 0;
 
-    free(las);
-
+    if (scanLAS(input,&la_first,&la_last))
+      { if (rindex(Alas,'/') != NULL)
+          Alas = rindex(Alas,'/')+1;
+        EPRINTF(EPLACE,"%s: LAS file %s has no overlaps !\n",Prog_Name,Alas);
+        fclose(input);
+        return (Ebuffer);
+      }
+    fclose(input);
+ 
     dbfile = Fopen(Adb,"r");
     if (dbfile == NULL)
       return (Ebuffer);
@@ -614,33 +644,31 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
       }
     if (fscanf(dbfile,DB_PARAMS,&size,&cutoff,&all) != 3)
       goto junk;
-    if (part <= 0)
-      term = nblocks;
-    else
-      term = part;
-    for (i = 1; i <= term; i++)
-      if (fscanf(dbfile,DB_BDATA,&oindx,&db_first) != 2)
-        goto junk;
-    if (fscanf(dbfile,DB_BDATA,&oindx,&db_last) != 2)
-      goto junk;
-    if (part <= 0)
-      db_first = 0;
+
+    for (i = 0; i <= nblocks; i++)
+      { if (fscanf(dbfile,DB_BDATA,&oindx,&db_last) != 2)
+          goto junk;
+        if (la_first >= db_last)
+          db_first = db_last; 
+        if (la_last < db_last)
+          break;
+      }
     fclose(dbfile);
 
     if (first >= 0)
-      { if (first < db_first)
-          { EPRINTF(EPLACE,"First read %d is < first read of block %d\n",first+1,db_first+1);
+      { if (first >= db_last)
+          { EPRINTF(EPLACE,"First requested read %d is > last read in las block %d\n",first+1,db_last);
             return (Ebuffer);
           }
-        else
+        else if (first > db_first)
           db_first = first;
       }
     if (last >= 0)
-      { if (last > db_last)
-          { EPRINTF(EPLACE,"Last read %d is > last read of block %d\n",last,db_last);
+      { if (last <= db_first)
+          { EPRINTF(EPLACE,"Last requested read %d is < first read in las block %d\n",last,db_first+1);
             return (Ebuffer);
           }
-        else
+        else if (last < db_last)
           db_last = last;
       }
     MODEL.first = db_first;
@@ -733,7 +761,9 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
   return (NULL);
 
 junk:
-  EPRINTF(EPLACE,"%s: Stub file (.db) is junk!\n",Prog_Name);
+  if (rindex(Adb,'/') != NULL)
+    Adb = rindex(Adb,'/')+1;
+  EPRINTF(EPLACE,"%s: Stub file %s is junk!\n",Prog_Name,Adb);
 error:
   fclose(dbfile);
   return (Ebuffer);
