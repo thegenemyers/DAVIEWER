@@ -43,8 +43,8 @@ typedef struct
   } Pile;
 
 typedef struct
-  { HITS_DB *db1;    //  Model is db1[first..last) vs db2 with alignments in stream input
-    HITS_DB *db2;
+  { DAZZ_DB *db1;    //  Model is db1[first..last) vs db2 with alignments in stream input
+    DAZZ_DB *db2;
     int      first;  // First read index in pile (0-based)
     int      last;   // Last read index + 1
 
@@ -59,8 +59,8 @@ typedef struct
     int      tspace; // Trace spacing
     int      tbytes; // Trace unit isze
 
-    HITS_TRACK *qvs; // Quality track (if != NULL)
-    HITS_TRACK *prf; // Repeat Profile track (if != NULL)
+    DAZZ_TRACK *qvs; // Quality track (if != NULL)
+    DAZZ_TRACK *prf; // Repeat Profile track (if != NULL)
 
     int      *panels; // plist[panel[i],panel[i+1) is the list of LAs covering a
     int      *plists; //   part of panel i.

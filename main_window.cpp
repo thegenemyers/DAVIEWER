@@ -132,7 +132,7 @@ int MyCanvas::pick(int x, int y, int &aread, int &bread)
 { DataModel *model   = getModel();
   MyScroll  *scroll  = (MyScroll *) parent();
 
-  HITS_DB *db1, *db2;
+  DAZZ_DB *db1, *db2;
   int      first, last;
   Pile     *pile;
   LA       *align;
@@ -304,7 +304,7 @@ void MyCanvas::haloUpdate(bool ison)
 }
 
 void MyCanvas::assignColor()
-{ HITS_READ *read = getModel()->db2->reads;
+{ DAZZ_READ *read = getModel()->db2->reads;
   int        cidx = read[haloed].flags & DB_QV;
   int        i;
   static QColor newColor = QColor(255,125,255);
@@ -332,6 +332,32 @@ void MyCanvas::assignColor()
       update();
     }
 }
+
+void MyCanvas::setColor(QColor &color, int read)
+{ DAZZ_READ *reads = getModel()->db2->reads;
+  int        cidx  = reads[read].flags & DB_QV;
+  int i;
+
+  if (cidx == 0)
+    { for (i = 1; i <= DB_QV; i++)
+        if (avail[i])
+          break;
+      if (i > DB_QV)
+        { printf("Overflow\n");
+          return;
+        }
+    }
+  else
+    i = cidx;
+
+  avail[i]  = false;
+  colors[i] = color;
+  reads[read].flags |= i;
+  update();
+}
+
+void MyScroll::setColor(QColor &color, int read)
+{ mycanvas->setColor(color,read); }
 
 // void MyCanvas::showAlignment()
 // { printf("align stub\n"); fflush(stdout);
@@ -496,7 +522,7 @@ void MyCanvas::mousePressEvent(QMouseEvent *event)
 
       if (bst >= 0)
         if (bread >= 0)
-          { HITS_DB *db1, *db2;
+          { DAZZ_DB *db1, *db2;
             LA       *align;
 
             int     w, e;
@@ -755,7 +781,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
 
   if (model != NULL)
 
-    { HITS_DB *db1, *db2;
+    { DAZZ_DB *db1, *db2;
       int      first, last;
       Pile     *pile;
       LA       *align;
@@ -773,7 +799,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
       bool        doGrid, doBridge, doOverlap;
       bool        doRead, doPile, doProf;
       int         bAnno;
-      HITS_TRACK *track[palette->nmasks];
+      DAZZ_TRACK *track[palette->nmasks];
       int         tIndex[palette->nmasks];
       int         readRow, firstBRow;
 
@@ -1615,10 +1641,11 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                         { if (ae < ab)
                             { ae = ae+tspace;
                               xf = x1 + ae*hbp;
-			      if (ae-ab >= 20)
-                                vl = (trace[pt]*40.)/((ae-ab) + trace[pt+1]);
-                              else
-                                vl = 19;
+                              vl = (trace[pt]*20.)/(ae-ab);
+			      // if (ae-ab >= 20)
+                                // vl = (trace[pt]*40.)/((ae-ab) + trace[pt+1]);
+                              // else
+                                // vl = 19;
                               pt += 2;
                               painter.setPen(mPen[vl]);
                               painter.drawLine(xs,y,xf,y);
@@ -1629,10 +1656,11 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                             { ae = ae + tspace;
                               if (ae > aend)
                                 { xf = x1 + aend*hbp;
-                                  if (aend-ab >= 20)
-                                    vl = (trace[pt]*40.)/((aend-ab) + trace[pt+1]);
-                                  else
-                                    vl = 19;
+                                  vl = (trace[pt]*20.)/(ae-ab);
+                                  // if (aend-ab >= 20)
+                                    // vl = (trace[pt]*40.)/((aend-ab) + trace[pt+1]);
+                                  // else
+                                    // vl = 19;
                                   pt += 2;
                                   painter.setPen(mPen[vl]);
                                   painter.drawLine(xs,y,xf,y);
@@ -1651,10 +1679,11 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                         { if (ae < ab)
                             { ae = ae+tspace;
                               xf = x1 + ae*hbp;
-                              if (ae-ab >= 20)
-                                vl = (trace[pt]*200.)/((ae-ab) + trace[pt+1]);
-                              else
-                                vl = 100;
+                              vl = (trace[pt]*100.)/(ae-ab);
+                              // if (ae-ab >= 20)
+                                // vl = (trace[pt]*200.)/((ae-ab) + trace[pt+1]);
+                              // else
+                                // vl = 100;
                               pt += 2;
                               if (vl <= lowT)
                                 painter.setPen(mPen[0]);
@@ -1670,10 +1699,11 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                             { ae = ae + tspace;
                               if (ae > aend)
                                 { xf = x1 + aend*hbp;
-                                  if (aend-ab >= 20)
-                                    vl = (trace[pt]*200.)/((aend-ab) + trace[pt+1]);
-                                  else
-                                    vl = 100;
+                                  vl = (trace[pt]*100.)/(ae-ab);
+                                  // if (aend-ab >= 20)
+                                    // vl = (trace[pt]*200.)/((aend-ab) + trace[pt+1]);
+                                  // else
+                                    // vl = 100;
                                   pt += 2;
                                   if (vl <= lowT)
                                     painter.setPen(mPen[0]);
@@ -2895,7 +2925,7 @@ void PaletteDialog::drawRightDash(const QColor &color)
 PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
 { int j;
 
-  QIntValidator *validInt = new QIntValidator(1,INT32_MAX,this);
+  QIntValidator *validInt = new QIntValidator(0,INT32_MAX,this);
 
   // TAB 1: Basic Options
 
@@ -4618,7 +4648,9 @@ void MainWindow::clearMesg()
 { queryMesg->setText(tr("")); }
 
 void MainWindow::query()
-{ int         read1, read2;
+{ static QColor newColor = QColor(255,125,255);
+
+  int         read1, read2;
   int         beg, end;
   DataModel  *model;
   QString     frag;
@@ -4642,14 +4674,78 @@ void MainWindow::query()
   while (i < len && isspace(text[i]))
     i += 1;
   if (i >= len)
-    { queryMesg->setText(tr("^ Expecting a positive number"));
+    { queryMesg->setText(tr("^ Empty request"));
       return;
     }
-  r1pos = i;
+
+  //  Color query handling
+
+  if (text[i] == 'C')
+    { i += 1;
+      while (i < len && isspace(text[i]))
+        i += 1;
+
+      r1pos = i;
+      read2 = model->db2->nreads;
+      while (i < len)
+        { if ( ! isdigit(text[i]))
+            { queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a positive number"));
+              return;
+            }
+          dpos = i;
+          while (i < len && isdigit(text[i]))
+            i += 1;
+          read1 = atoi(text+dpos);
+          if (read1 < 1 || read1 > read2)
+            { queryMesg->setText(tr("%1").arg(tr(""),dpos) +
+                                 tr("^ Out of range [1,%1]").arg(QString::number(read2)));
+              return;
+            }
+
+          while (i < len && isspace(text[i]))
+            i += 1;
+          if (i < len)
+            { if (text[i] != ',')
+                { queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a comma"));
+                  return;
+                }
+              i += 1;
+              while (i < len && isspace(text[i]))
+                i += 1;
+            }
+        }
+
+      newColor = QColorDialog::getColor(newColor,this,tr("Read Color"));
+      if ( ! newColor.isValid())
+        return;
+
+      text = frag.toLatin1().data();
+      i = r1pos;
+      while (i < len)
+        { read1 = atoi(text+i);
+          while (i < len && isdigit(text[i]))
+            i += 1;
+          while (i < len && isspace(text[i]))
+            i += 1;
+          if (i < len)
+            { i += 1;
+              while (i < len && isspace(text[i]))
+                i += 1;
+            }
+          myscroll->setColor(newColor,read1-1);
+          text = frag.toLatin1().data();
+        }
+
+      return;
+    }
+
+  //  Pile query handling
+
   if ( ! isdigit(text[i]))
     { queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a positive number"));
       return;
     }
+  r1pos = i;
   while (i < len && isdigit(text[i]))
     i += 1;
   while (i < len && isspace(text[i]))
@@ -4773,7 +4869,7 @@ void PaletteDialog::restoreLayout()
 }
 
 int PaletteDialog::loadTracks(Palette_State &state, DataModel *model)
-{ HITS_TRACK   *t;
+{ DAZZ_TRACK   *t;
   QHash<QString,int> nhash;
   int           j, k, a, cnt;
 

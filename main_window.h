@@ -63,6 +63,7 @@ public:
   static int find_mask(int beg, int *a, int l, int r);
 
   void haloUpdate(bool on);
+  void setColor(QColor &color, int read);
 
 protected:
   void paintEvent(QPaintEvent *event);
@@ -131,6 +132,8 @@ public:
   void getState(Scroll_State &state);
   void putState(Scroll_State &state);
 
+  void setColor(QColor &color, int read);
+
 private slots:
   void vsValue(int);
   void vsSize(int);
@@ -195,7 +198,7 @@ typedef struct
     int       nmasks;
     bool        showTrack[MAX_TRACKS];
     QColor      trackColor[MAX_TRACKS];
-    HITS_TRACK *track[MAX_TRACKS];
+    DAZZ_TRACK *track[MAX_TRACKS];
     int         Arail[MAX_TRACKS];
     bool        showonB[MAX_TRACKS];
   } Palette_State;
@@ -391,7 +394,7 @@ private:
     QLabel      *trackLabel[MAX_TRACKS];
     QToolButton *trackBox[MAX_TRACKS];
     QColor       trackColor[MAX_TRACKS];
-    HITS_TRACK  *track[MAX_TRACKS];
+    DAZZ_TRACK  *track[MAX_TRACKS];
     QSpinBox    *trackApos[MAX_TRACKS];
     QCheckBox   *trackonB[MAX_TRACKS];
 

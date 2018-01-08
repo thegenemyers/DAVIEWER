@@ -271,7 +271,7 @@ static int tiplen(int ae, int be)
 static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
 { int        first, last;
   FILE      *input;
-  HITS_READ *reads;
+  DAZZ_READ *reads;
 
   LA   *local;
   Pile *pile;
@@ -583,8 +583,8 @@ static void OPEN_MASKS(char *path, char *extn)
 char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
                 int nolink, int nolap, int max_comp, int max_expn)
 { static char buffer[2*MAX_NAME+100];
-  static HITS_DB _db1;
-  static HITS_DB _db2;
+  static DAZZ_DB _db1;
+  static DAZZ_DB _db2;
 
   FILE *dbfile;
 
@@ -694,7 +694,7 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
     return (Ebuffer);
 
   { int        i, n;
-    HITS_READ *read = MODEL.db2->reads;
+    DAZZ_READ *read = MODEL.db2->reads;
  
     n = MODEL.db2->nreads;
     for (i = 0; i < n; i++)
@@ -738,7 +738,7 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
       return (Ebuffer);
     }
 
-  { HITS_TRACK *t, *u, *v;
+  { DAZZ_TRACK *t, *u, *v;
     int         j;
     int64      *anno;
 
