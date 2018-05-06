@@ -61,11 +61,35 @@ DataModel *getModel()
 
 static LA *LOCAL;
 
-int LEFTMOST(const void *l, const void *r)
+static int LEFTMOST(const void *l, const void *r)
 { int x = *((int *) l);
   int y = *((int *) r);
 
   return (LOCAL[x].abpos-LOCAL[y].abpos);
+}
+
+static int BIGGEST(const void *l, const void *r)
+{ int x = *((int *) l);
+  int y = *((int *) r);
+  int e, f;
+
+  if ((LOCAL[x].btip & LINK_FLAG) != 0)
+    { e = LOCAL[x].level;
+      if ((LOCAL[e].btip & LINK_FLAG) != 0)
+        e = LOCAL[e].bread;
+    }
+  else
+    e = x;
+
+  if ((LOCAL[y].btip & LINK_FLAG) != 0)
+    { f = LOCAL[y].level;
+      if ((LOCAL[f].btip & LINK_FLAG) != 0)
+        f = LOCAL[f].bread;
+    }
+  else
+    f = y;
+
+  return ((LOCAL[f].aepos-LOCAL[y].abpos) - (LOCAL[e].aepos - LOCAL[x].abpos));
 }
 
 static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
@@ -77,6 +101,9 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
   int last;
   int rtop;
   int blast;
+
+  (void) LEFTMOST;
+  (void) BIGGEST;
 
   LOCAL = MODEL.local;
   last  = pile[1].first;
