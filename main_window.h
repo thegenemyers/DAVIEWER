@@ -159,8 +159,11 @@ typedef struct
 
     bool   showGrid;
     bool   showHalo;
+    bool   showElim;
+    int    drawElim;
     QColor gridColor;
     QColor haloColor;
+    QColor elimColor;
 
     bool   bridges;
     bool   overlaps;
@@ -252,6 +255,7 @@ private slots:
   void branchChange();
   void gridChange();
   void haloChange();
+  void elimChange();
   void stretchChange();
   void neutralChange();
   void compressChange();
@@ -274,6 +278,7 @@ private slots:
 
   void activateGrid(int);
   void activateHalo(int);
+  void activateElim(int);
 
   void activateElastic(int);
   void drawLeftDash(const QColor &);
@@ -309,6 +314,11 @@ private:
     QLabel      *haloLabel;
     QToolButton *haloBox;
     QColor       haloColor;
+
+  QCheckBox *elimCheck;
+    QLabel      *elimLabel;
+    QToolButton *elimBox;
+    QColor       elimColor;
 
   QCheckBox *bridgeCheck;
   QCheckBox *overlapCheck;
@@ -421,7 +431,7 @@ class OpenDialog : public QDialog
 public:
   OpenDialog(QWidget *parent = 0);
 
-  bool openDataSet(int link, int laps, int comp, int expn);
+  bool openDataSet(int link, int laps, int elim, int comp, int expn);
 
   void getState(Open_State &state);
   void putState(Open_State &state);

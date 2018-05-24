@@ -92,7 +92,7 @@ static int BIGGEST(const void *l, const void *r)
   return ((LOCAL[f].aepos-LOCAL[y].abpos) - (LOCAL[e].aepos - LOCAL[x].abpos));
 }
 
-static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
+static int layoutPile(Pile *pile, int *rail, int nolink, int nolap, int elim,
                                              double comp_factor, double expn_factor)
 { int i, j, k, h;
   int r, n;
@@ -101,6 +101,8 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
   int last;
   int rtop;
   int blast;
+  short EMASK;
+  short EVALU;
 
   (void) LEFTMOST;
   (void) BIGGEST;
@@ -115,6 +117,15 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
   blast = LOCAL[last].bread;  //  Temporary EOL terminator
   LOCAL[last].bread = -1;
 
+  if (elim == 0)
+    EMASK = 0;
+  else
+    EMASK = ELIM_BIT;
+  if (elim <= 0)
+    EVALU = 0;
+  else
+    EVALU = ELIM_BIT;
+
   for (i = pile->first; i < last; i++)
     { if ((LOCAL[i].btip & INIT_FLAG) != 0)
         { b = LOCAL[i].bread;
@@ -128,30 +139,52 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
     }
 
   if (nolink && nolap)
-    for (i = pile->first; i < last; i++)
-      { LOCAL[i].abpos -= LOCAL[i].btip;
-        LOCAL[i].btip  |= INIT_FLAG;
-        rail[n++] = i;
-      }
+    { for (i = pile->first; i < last; i++)
+        if ((LOCAL[i].etip & EMASK) == EVALU)
+          { LOCAL[i].abpos -= LOCAL[i].btip;
+            LOCAL[i].btip  |= INIT_FLAG;
+            rail[n++] = i;
+          }
+    }
 
   else
     { if ((LOCAL[pile->first].etip & STRT_FLAG) != 0)
-        for (i = pile->first+1; i < last; i++)
-          { if ((LOCAL[i].etip & SUCC_FLAG) != 0)
-              { LOCAL[i].btip |= LINK_FLAG;
-                LOCAL[i].level = i-1;
-              }
-          }
+
+        for (i = pile->first; i < last; i++)
+          if ((LOCAL[i].etip & SUCC_FLAG) != 0)
+            { if ((LOCAL[i].etip & EMASK) == EVALU)
+                { if (last >= 0)
+                    { LOCAL[i].btip |= LINK_FLAG;
+                      LOCAL[i].level = last;
+                    }
+                  last = i;
+                }
+            }
+          else
+            { if ((LOCAL[i].etip & EMASK) == EVALU)
+                last = i;
+              else
+                last = -1;
+            }
+
+      //  Set up reverse link with L-flag only, use I-flag to mark elements already
+      //    interior to a chain.
 
       else
         for (i = pile->first; i < last; i = j)
           { b = LOCAL[i].bread;
             low = i;
             for (j = i+1; LOCAL[j].bread == b; j++)
-              { for (k = j-1; k >= low; k--)
+
+              { if ((LOCAL[j].etip & EMASK) != EVALU)
+                  continue;
+
+                for (k = j-1; k >= low; k--)
                   { int agap, bgap, pair;
   
                     if ((LOCAL[k].btip & INIT_FLAG) != 0)
+                      continue;
+                    if ((LOCAL[k].etip & EMASK) != EVALU)
                       continue;
   
                     agap = LOCAL[j].abpos - LOCAL[k].aepos;
@@ -187,11 +220,18 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
               }
           }
 
+      // Reverse links and add 1st element of each chain to the allocation rail
+      //    and add btip if any (but not etip until during allocation)
+      //    The L structure can be a tree, so be careful (while loop below makes
+      //    the reversal a chain no matter what).
+
       for (k = pile->first; k < last; k++)
         if ((LOCAL[k].btip & LINK_FLAG) == 0)
-          { LOCAL[k].btip  |= INIT_FLAG;
-            LOCAL[k].abpos -= (LOCAL[k].btip & DATA_MASK);
-            rail[n++] = k;
+          { if ((LOCAL[k].etip & EMASK) == EVALU)
+              { LOCAL[k].btip  |= INIT_FLAG;
+                LOCAL[k].abpos -= (LOCAL[k].btip & DATA_MASK);
+                rail[n++] = k;
+              }
           }
         else
           { h = LOCAL[k].level;
@@ -201,6 +241,8 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
             LOCAL[h].btip |= LINK_FLAG;
             LOCAL[k].btip &= DATA_MASK;
           }
+
+      //  Have chains to draw, establish bread jumping links for each chain
 
       for (k = pile->first; k < last; k++)
         if ((LOCAL[k].btip & INIT_FLAG) != 0)
@@ -219,6 +261,10 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
     }
 
   qsort(rail,n,sizeof(int),LEFTMOST);
+
+  //  Pull chain starts from abpos (with btip) sorted rail array, allocate
+  //    next free rail, restore abpos to not have tip, compute furthest x-coord
+  //    of an end with its etip, and update rail to reflect allocation
 
   rtop = 0;
   for (i = 0; i < n; i++)
@@ -247,7 +293,7 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap,
   return (rtop);
 }
 
-int reLayoutModel(int nolink, int nolap, int max_comp, int max_expn)
+int reLayoutModel(int nolink, int nolap, int elim, int max_comp, int max_expn)
 { int   *rail;
   int    depth;
   double comp_factor, expn_factor;
@@ -265,7 +311,7 @@ int reLayoutModel(int nolink, int nolap, int max_comp, int max_expn)
 
   depth = 0;
   for (a = MODEL.first; a < MODEL.last; a++)
-    { n = layoutPile(MODEL.pile+a,rail,nolink,nolap,comp_factor,expn_factor);
+    { n = layoutPile(MODEL.pile+a,rail,nolink,nolap,elim,comp_factor,expn_factor);
       if (n > depth)
         depth = n;
     }
@@ -295,7 +341,7 @@ static int tiplen(int ae, int be)
   return (tip);
 }
 
-static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
+static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_expn)
 { int        first, last;
   FILE      *input;
   DAZZ_READ *reads;
@@ -401,6 +447,8 @@ static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
         local[n].etip |= STRT_FLAG;
       if (CHAIN_NEXT(ovl.flags))
         local[n].etip |= SUCC_FLAG;
+      if (ELIM(ovl.flags))
+        local[n].etip |= ELIM_BIT;
    
       n += 1;
 
@@ -539,7 +587,7 @@ static int buildModel(int nolink, int nolap, int max_comp, int max_expn)
   MODEL.plists = plists;
 
   UNDEFINED = 0;
-  if (reLayoutModel(nolink,nolap,max_comp,max_expn))
+  if (reLayoutModel(nolink,nolap,elim,max_comp,max_expn))
     { UNDEFINED = 1;
       goto error;
     }
@@ -608,7 +656,7 @@ static void OPEN_MASKS(char *path, char *extn)
 }
 
 char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
-                int nolink, int nolap, int max_comp, int max_expn)
+                int nolink, int nolap, int elim, int max_comp, int max_expn)
 { static char buffer[2*MAX_NAME+100];
   static DAZZ_DB _db1;
   static DAZZ_DB _db2;
@@ -684,7 +732,8 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
 
     if (first >= 0)
       { if (first >= db_last)
-          { EPRINTF(EPLACE,"First requested read %d is > last read in las block %d\n",first+1,db_last);
+          { EPRINTF(EPLACE,"First requested read %d is > last read in las block %d\n",
+                           first+1,db_last);
             return (Ebuffer);
           }
         else if (first > db_first)
@@ -692,7 +741,8 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
       }
     if (last >= 0)
       { if (last <= db_first)
-          { EPRINTF(EPLACE,"Last requested read %d is < first read in las block %d\n",last,db_first+1);
+          { EPRINTF(EPLACE,"Last requested read %d is < first read in las block %d\n",
+                           last,db_first+1);
             return (Ebuffer);
           }
         else if (last < db_last)
@@ -757,7 +807,7 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
 
   MODEL.input = fopen(Alas,"r");
 
-  if (buildModel(nolink,nolap,max_comp,max_expn))
+  if (buildModel(nolink,nolap,elim,max_comp,max_expn))
     { fclose(MODEL.input);
       Close_DB(MODEL.db1);
       if (MODEL.db2 != MODEL.db1)

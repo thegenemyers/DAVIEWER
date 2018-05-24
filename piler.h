@@ -19,9 +19,10 @@ extern int PANEL_SIZE;        //  Actual panel size, must be a multiple of getMo
 #define LINK_FLAG 0x8000  //  This LA is linked to a following LA (via .level field)
 #define DRAW_OFF  0xdfff  //  ~ DRAW_FLAG
 
-#define DATA_ETIP 0x3fff  //  Get btip value
+#define DATA_ETIP 0x1fff  //  Get etip value
 #define STRT_FLAG 0x8000  //  Chain start
 #define SUCC_FLAG 0x4000  //  Chain next
+#define ELIM_BIT  0x2000  //  Eliminated LA
 
 typedef struct
   { int   bread;           //  I = 1: (B-read << 1) | complement flag
@@ -62,17 +63,17 @@ typedef struct
     DAZZ_TRACK *qvs; // Quality track (if != NULL)
     DAZZ_TRACK *prf; // Repeat Profile track (if != NULL)
 
-    int      *panels; // plist[panel[i],panel[i+1) is the list of LAs covering a
+    int      *panels; // plist[panel[i],panel[i+1]) is the list of LAs covering a
     int      *plists; //   part of panel i.
   } DataModel;
 
 char *openModel(char *las, char *Adb, char *Bdb, int first, int last,
-                int nolink, int nolap, int max_comp, int max_expn);
+                int nolink, int nolap, int elim, int max_comp, int max_expn);
 
   //  Layout the current model (if any) with links iff nolink == zero and overlaps iff nolap == 0
   //    This operation resets the depth field of the model and the level field of every LA.
 
-int        reLayoutModel(int nolink, int nolap, int max_comp, int max_expn);
+int        reLayoutModel(int nolink, int nolap, int elim, int max_comp, int max_expn);
 
 int        dataWidth();
 int        dataHeight();

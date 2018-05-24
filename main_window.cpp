@@ -210,6 +210,7 @@ int MyCanvas::pick(int x, int y, int &aread, int &bread)
   { int    p, bst;
     double d, dst;
     int    readRow, firstBRow;
+    Palette_State *palette = &(MainWindow::palette);
 
     readRow   = 3 + MainWindow::numLive;
     firstBRow = readRow+2;
@@ -218,8 +219,7 @@ int MyCanvas::pick(int x, int y, int &aread, int &bread)
     dst = INT32_MAX;
 
     if (vpos <= readRow + vbp)
-      { Palette_State *palette = &(MainWindow::palette);
-        int j, y;
+      { int j, y;
 
         d = fabs(readRow-vpos);
         if (d <= vbp)
@@ -254,10 +254,28 @@ int MyCanvas::pick(int x, int y, int &aread, int &bread)
       }
 
     if (vpos >= firstBRow-vbp)
-      { for (p = panel[fap]; p < panel[fap+len]; p++) 
+      { short EMASK;
+        short EVALU;
+
+        if (palette->drawElim < 0)
+          { EMASK = ELIM_BIT;
+            EVALU = 0;
+          }
+        else if (palette->drawElim == 0)
+          { EMASK = 0;;
+            EVALU = 0;
+          }
+        else
+          { EMASK = ELIM_BIT;
+            EVALU = ELIM_BIT;
+          }
+
+        for (p = panel[fap]; p < panel[fap+len]; p++) 
           { int y, f, e, b;
 
             f = plist[p];
+            if ((align[f].etip & EMASK) != EVALU)
+              continue;
             b = align[f].btip;
             if ((b & LINK_FLAG) != 0)
               { if ((b & INIT_FLAG) == 0)
@@ -797,13 +815,14 @@ void MyCanvas::paintEvent(QPaintEvent *event)
       int      fpanel, lpanel;
 
       bool        doGrid, doBridge, doOverlap;
-      bool        doRead, doPile, doProf;
+      bool        doRead, doPile, doProf, doElim;
+      short       EMASK, EVALU;
       int         bAnno;
       DAZZ_TRACK *track[palette->nmasks];
       int         tIndex[palette->nmasks];
       int         readRow, firstBRow;
 
-      QPen     cPen, dPen, rPen, hPen, qPen[20], mPen[20], pPen[20];
+      QPen     cPen, dPen, rPen, hPen, ePen, qPen[20], mPen[20], pPen[20];
       QColor   stretch [21];
       QColor   compress[21];
       double   stfact, cmfact;
@@ -866,7 +885,22 @@ void MyCanvas::paintEvent(QPaintEvent *event)
       { int  j;
         bool sym = ! (MainWindow::dataset).asym;
 
-        doHalo    = (MIN_HORZ_VIEW*hbp >= MIN_FEATURE_SIZE && palette->showHalo);
+        doHalo = (MIN_HORZ_VIEW*hbp >= MIN_FEATURE_SIZE && palette->showHalo);
+        doElim = palette->showElim;
+
+        if (palette->drawElim < 0)
+          { EMASK = ELIM_BIT;
+            EVALU = 0;
+          }
+        else if (palette->drawElim == 0)
+          { EMASK = 0;;
+            EVALU = 0;
+          }
+        else
+          { EMASK = ELIM_BIT;
+            EVALU = ELIM_BIT;
+            doElim = false;
+          }
 
         doGrid    = palette->showGrid;
         doBridge  = palette->bridges;
@@ -912,6 +946,10 @@ void MyCanvas::paintEvent(QPaintEvent *event)
 
         hPen.setWidth(4);
         hPen.setCapStyle(Qt::FlatCap);
+
+        ePen.setWidth(4);
+        ePen.setCapStyle(Qt::FlatCap);
+        ePen.setColor(palette->elimColor);
 
         if (doBridge || doOverlap)
           { int nr = palette->neutralColor.red();
@@ -1163,27 +1201,32 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                 bool  halo;
 
                 f = plist[k];
+
+                // if ((align[f].etip & EMASK) != EVALU)
+                // continue;
+
                 b = align[f].btip;
-                if ((b & DRAW_FLAG) != 0)
-                  continue;
+                // if ((b & DRAW_FLAG) != 0)
+                  // continue;
 
                 if ((b & INIT_FLAG) == 0)
-                  { if ((b & LINK_FLAG) != 0)
-                      f = align[f].bread;
-                    lev = align[f].level;
-                    f = align[f].bread;
+                  continue;
+                  // { if ((b & LINK_FLAG) != 0)
+                      // f = align[f].bread;
+                    // lev = align[f].level;
+                    // f = align[f].bread;
+                  // }
+                // else
+
+                if ((b & LINK_FLAG) != 0)
+                  { y = align[f].level;
+                    if ((align[y].btip & LINK_FLAG) != 0)
+                      y = align[y].bread;
+                    lev = align[y].level;
                   }
                 else
-                  { if ((b & LINK_FLAG) != 0)
-                      { y = align[f].level;
-                        if ((align[y].btip & LINK_FLAG) != 0)
-                          y = align[y].bread;
-                        lev = align[y].level;
-                      }
-                    else
-                      lev = align[f].level;
-                  }
- 
+                  lev = align[f].level;
+
                 y = ((lev+firstBRow) - vbeg)*vbp;
                 if (y >= high - rulerHeight)
                   continue;
@@ -1221,6 +1264,10 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                   }
   
                 xf = x1 + align[f].aepos*hbp;
+                if (doElim && (align[f].etip & ELIM_BIT) != 0)
+                  { painter.setPen(ePen);
+                    painter.drawLine(xs,y,xf,y);
+                  }
                 if (halo)
                   { painter.setPen(hPen);
                     painter.drawLine(xs,y,xf,y);
@@ -1230,7 +1277,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                     painter.setPen(cPen);
                     painter.drawLine(xs,y,xf,y);
                   }
-                align[f].btip |= DRAW_FLAG;
+                // align[f].btip |= DRAW_FLAG;
 
                 c = f;
                 while ((align[f].btip & LINK_FLAG) != 0)
@@ -1284,6 +1331,10 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                       c = f;
   
                     xf = x1 + align[f].aepos*hbp;
+                    if (doElim && (align[f].etip & ELIM_BIT) != 0)
+                      { painter.setPen(ePen);
+                        painter.drawLine(xs,y,xf,y);
+                      }
                     if (halo)
                       { painter.setPen(hPen);
                         painter.drawLine(xs,y,xf,y);
@@ -1293,7 +1344,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                         painter.setPen(cPen);
                         painter.drawLine(xs,y,xf,y);
                       }
-                    align[f].btip |= DRAW_FLAG;
+                    // align[f].btip |= DRAW_FLAG;
                   }
                 f = (align[c].etip & DATA_ETIP);
                 if (f > 0)
@@ -1307,6 +1358,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
           }
       }
 
+/*
       //  Reset all DRAW_FLAGS
 
       { int k, f, b;
@@ -1326,9 +1378,9 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                   }
                 align[f].btip &= DRAW_OFF;
               }
-
           }
       }
+*/
 
 
       //  Draw A-read:  quality value segments
@@ -1573,6 +1625,9 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                   int   b, cmp, bln;
 
                   f = plist[k];
+                  if ((align[f].etip & EMASK) != EVALU)
+                    continue;
+
                   aln = align+f;
                   if (aln->abpos < ehr || aln->abpos >= pend || aln->aepos <= pbeg)
                     continue;
@@ -2175,6 +2230,7 @@ COLOR_CHANGE(alignChange,alignColor,alignBox)
 COLOR_CHANGE(branchChange,branchColor,branchBox)
 COLOR_CHANGE(gridChange,gridColor,gridBox)
 COLOR_CHANGE(haloChange,haloColor,haloBox)
+COLOR_CHANGE(elimChange,elimColor,elimBox)
 COLOR_CHANGE(stretchChange,stretchColor,stretchBox)
 COLOR_CHANGE(neutralChange,neutralColor,neutralBox)
 COLOR_CHANGE(compressChange,compressColor,compressBox)
@@ -2299,6 +2355,14 @@ void PaletteDialog::activateHalo(int state)
   on = (state == Qt::Checked);
   haloLabel->setEnabled(on);
   haloBox->setEnabled(on);
+}
+
+void PaletteDialog::activateElim(int state)
+{ bool on;
+
+  on = (state == Qt::Checked);
+  elimLabel->setEnabled(on);
+  elimBox->setEnabled(on);
 }
 
 void PaletteDialog::activateMatchQV(int state)
@@ -2489,7 +2553,10 @@ void PaletteDialog::setView()
 }
 
 void PaletteDialog::getState(Palette_State &state)
-{ QHash<void *,int> hash;
+{ static QColor black = QColor(0,0,0);
+  static QColor white = QColor(255,255,255);
+
+  QHash<void *,int> hash;
   int order[MAX_TRACKS];
   int j, k;
 
@@ -2500,8 +2567,16 @@ void PaletteDialog::getState(Palette_State &state)
 
   state.gridColor     = gridColor;
   state.haloColor     = haloColor;
+  state.elimColor     = elimColor;
   state.showGrid      = gridCheck->isChecked();
   state.showHalo      = haloCheck->isChecked();
+  state.showElim      = elimCheck->isChecked();
+  if (elimColor == black)
+    state.drawElim = -1;
+  else if (elimColor == white)
+    state.drawElim = 1;
+  else
+    state.drawElim = 0;
 
   state.bridges       = bridgeCheck->isChecked();
   state.overlaps      = overlapCheck->isChecked();
@@ -2573,6 +2648,7 @@ void PaletteDialog::putState(Palette_State &state)
   branchColor   = state.branchColor;
   gridColor     = state.gridColor;
   haloColor     = state.haloColor;
+  elimColor     = state.elimColor;
   stretchColor  = state.stretchColor;
   neutralColor  = state.neutralColor;
   compressColor = state.compressColor;
@@ -2616,6 +2692,9 @@ void PaletteDialog::putState(Palette_State &state)
   blob.fill(haloColor);
   haloBox->setIcon(QIcon(blob));
 
+  blob.fill(elimColor);
+  elimBox->setIcon(QIcon(blob));
+
   blob.fill(stretchColor);
   stretchBox->setIcon(QIcon(blob));
 
@@ -2652,6 +2731,7 @@ void PaletteDialog::putState(Palette_State &state)
 
   gridCheck->setChecked(state.showGrid);
   haloCheck->setChecked(state.showHalo);
+  elimCheck->setChecked(state.showElim);
 
   if (matchGood >= 0)
     matchBot->setText(tr("%1").arg(matchGood));
@@ -2983,6 +3063,18 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     haloLabel->setEnabled(false);
     haloBox->setEnabled(false);
 
+  elimBox = new QToolButton();
+    elimBox->setIconSize(QSize(16,16));
+    elimBox->setFixedSize(20,20);
+    elimBox->setIcon(QIcon(QPixmap(16,16)));
+
+  elimLabel = new QLabel(tr("Peeled LA"));
+
+  elimCheck = new QCheckBox();
+    elimCheck->setFixedWidth(30);
+    elimLabel->setEnabled(false);
+    elimBox->setEnabled(false);
+
   QGridLayout *grid = new QGridLayout();
     grid->addWidget(backBox,   0,1,1,1,Qt::AlignVCenter);
     grid->addWidget(backLabel, 0,2,1,1,Qt::AlignLeft|Qt::AlignVCenter);
@@ -3003,6 +3095,10 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     grid->addWidget(haloCheck, 5,0,1,1);
     grid->addWidget(haloBox ,  5,1,1,1,Qt::AlignVCenter);
     grid->addWidget(haloLabel, 5,2,1,1,Qt::AlignLeft|Qt::AlignVCenter);
+
+    grid->addWidget(elimCheck, 6,0,1,1);
+    grid->addWidget(elimBox ,  6,1,1,1,Qt::AlignVCenter);
+    grid->addWidget(elimLabel, 6,2,1,1,Qt::AlignLeft|Qt::AlignVCenter);
 
     grid->setVerticalSpacing(12);
 
@@ -3581,6 +3677,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
   connect(branchBox,SIGNAL(pressed()),this,SLOT(branchChange()));
   connect(gridBox,SIGNAL(pressed()),this,SLOT(gridChange()));
   connect(haloBox,SIGNAL(pressed()),this,SLOT(haloChange()));
+  connect(elimBox,SIGNAL(pressed()),this,SLOT(elimChange()));
   connect(stretchBox,SIGNAL(pressed()),this,SLOT(stretchChange()));
   connect(neutralBox,SIGNAL(pressed()),this,SLOT(neutralChange()));
   connect(compressBox,SIGNAL(pressed()),this,SLOT(compressChange()));
@@ -3595,6 +3692,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
 
   connect(gridCheck,SIGNAL(stateChanged(int)),this,SLOT(activateGrid(int)));
   connect(haloCheck,SIGNAL(stateChanged(int)),this,SLOT(activateHalo(int)));
+  connect(elimCheck,SIGNAL(stateChanged(int)),this,SLOT(activateElim(int)));
 
   connect(maxStretch,SIGNAL(editingFinished()),this,SLOT(stretchCheck()));
   connect(maxCompress,SIGNAL(editingFinished()),this,SLOT(compressCheck()));
@@ -3643,7 +3741,10 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
 }
 
 void PaletteDialog::readAndApplySettings(QSettings &settings)
-{ Palette_State state;
+{ static QColor black = QColor(0,0,0);
+  static QColor white = QColor(255,255,255);
+
+  Palette_State state;
   QRgb matchRGB[10];
   QRgb matchTri[3];
   QRgb qualRGB[10];
@@ -3659,6 +3760,7 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
     QRgb branchRGB    = settings.value("branch",QColor(150,100,50).rgb()).toUInt();
     QRgb gridRGB      = settings.value("grid",QColor(255,255,50).rgb()).toUInt();
     QRgb haloRGB      = settings.value("halo",QColor(0,255,255).rgb()).toUInt();
+    QRgb elimRGB      = settings.value("elim",QColor(0,255,255).rgb()).toUInt();
     QRgb stretchRGB   = settings.value("stretch",QColor(125,125,255).rgb()).toUInt();
     QRgb neutralRGB   = settings.value("neutral",QColor(255,255,255).rgb()).toUInt();
     QRgb compressRGB  = settings.value("compress",QColor(255,125,125).rgb()).toUInt();
@@ -3705,6 +3807,7 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
 
     state.showGrid    = settings.value("showG",false).toBool();
     state.showHalo    = settings.value("showH",false).toBool();
+    state.showElim    = settings.value("showP",false).toBool();
     state.stretchMax  = settings.value("strMax",30).toInt();
     state.compressMax = settings.value("compMax",30).toInt();
     state.bridges     = settings.value("bridge",false).toBool();
@@ -3733,6 +3836,7 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
   state.branchColor.setRgb(branchRGB);
   state.gridColor.setRgb(gridRGB);
   state.haloColor.setRgb(haloRGB);
+  state.elimColor.setRgb(elimRGB);
   state.stretchColor.setRgb(stretchRGB);
   state.neutralColor.setRgb(neutralRGB);
   state.compressColor.setRgb(compressRGB);
@@ -3748,6 +3852,13 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
     state.profColor[j].setRgb(profRGB[j]);
   for (j = 0; j < 3; j++)
     state.profHue[j].setRgb(profTri[j]);
+
+  if (state.elimColor == black)
+    state.drawElim = -1;
+  else if (state.elimColor == white)
+    state.drawElim = 1;
+  else
+    state.drawElim = 0;
 
   state.matchVis = matchCheck->isEnabled();
   state.qualVis = qualVis;
@@ -3788,11 +3899,13 @@ void PaletteDialog::writeSettings(QSettings &settings)
     settings.setValue("branch",branchColor.rgb());
     settings.setValue("grid",gridColor.rgb());
     settings.setValue("halo",haloColor.rgb());
+    settings.setValue("elim",elimColor.rgb());
     settings.setValue("stretch",stretchColor.rgb());
     settings.setValue("neutral",neutralColor.rgb());
     settings.setValue("compress",compressColor.rgb());
     settings.setValue("showG", gridCheck->isChecked());
     settings.setValue("showH", haloCheck->isChecked());
+    settings.setValue("showP", elimCheck->isChecked());
     settings.setValue("strMax", stretchMax);
     settings.setValue("compMax", compressMax);
     settings.setValue("bridge", bridgeCheck->isChecked());
@@ -3840,7 +3953,10 @@ void PaletteDialog::writeSettings(QSettings &settings)
 }
 
 bool PaletteDialog::readView(Palette_State &state, QString &view)
-{ QHash<QString,int> mhash;
+{ static QColor black = QColor(0,0,0);
+  static QColor white = QColor(255,255,255);
+
+  QHash<QString,int> mhash;
   QHash< void *,int> phash;
 
   QSettings settings("mpi-cbg", "DaView");
@@ -3868,8 +3984,17 @@ bool PaletteDialog::readView(Palette_State &state, QString &view)
 
     state.gridColor.setRgb(settings.value("grid").toUInt());
     state.haloColor.setRgb(settings.value("halo").toUInt());
+    state.elimColor.setRgb(settings.value("elim").toUInt());
     state.showGrid = settings.value("showG").toBool();
     state.showHalo = settings.value("showH").toBool();
+    state.showElim = settings.value("showP").toBool();
+
+    if (state.elimColor == black)
+      state.drawElim = -1;
+    else if (state.elimColor == white)
+      state.drawElim = 1;
+    else
+      state.drawElim = 0;
 
     state.bridges     = settings.value("bridge").toBool();
     state.overlaps    = settings.value("overlap").toBool();
@@ -4001,8 +4126,10 @@ void PaletteDialog::writeView(Palette_State &state, QString &view)
 
     settings.setValue("grid",state.gridColor.rgb());
     settings.setValue("halo",state.haloColor.rgb());
+    settings.setValue("elim",state.haloColor.rgb());
     settings.setValue("showG",state.showGrid);
     settings.setValue("showH",state.showHalo);
+    settings.setValue("showP",state.showElim);
 
     settings.setValue("bridge",state.bridges);
     settings.setValue("overlap",state.overlaps);
@@ -4243,7 +4370,7 @@ void OpenDialog::aboutTo()
   accept();
 }
 
-bool OpenDialog::openDataSet(int link, int laps, int comp, int expn)
+bool OpenDialog::openDataSet(int link, int laps, int elim, int comp, int expn)
 { char         *v;
   int           f, l;
   Palette_State palette;
@@ -4257,11 +4384,11 @@ bool OpenDialog::openDataSet(int link, int laps, int comp, int expn)
   if (BBox->isChecked())
     v = openModel( lasInfo->absoluteFilePath().toLatin1().data(),
                    AInfo->absoluteFilePath().toLatin1().data(),
-                   BInfo->absoluteFilePath().toLatin1().data(),f,l,!link,!laps,comp,expn);
+                   BInfo->absoluteFilePath().toLatin1().data(),f,l,!link,!laps,elim,comp,expn);
   else
     v = openModel( lasInfo->absoluteFilePath().toLatin1().data(),
                    AInfo->absoluteFilePath().toLatin1().data(),
-                   NULL,f,l,!link,!laps,comp,expn);
+                   NULL,f,l,!link,!laps,elim,comp,expn);
 
   if (v != NULL)
     { MainWindow::warning(tr(v+10),this,MainWindow::ERROR,tr("OK"));
@@ -4928,7 +5055,7 @@ void MainWindow::openFiles()
     { openDialog->getState(dataset);
       vidx = openDialog->getView();
 
-      if (openDialog->openDataSet(palette.bridges,palette.overlaps,
+      if (openDialog->openDataSet(palette.bridges,palette.overlaps,palette.drawElim,
                                   palette.compressMax,palette.stretchMax ))
         { DataModel    *model = getModel();
           int           j;
@@ -4967,8 +5094,9 @@ void MainWindow::openPalette()
       paletteDialog->getView();
       paletteDialog->restoreLayout();
 
-      if (state.bridges != palette.bridges || state.overlaps != palette.overlaps)
-        reLayoutModel( ! palette.bridges, ! palette.overlaps,
+      if (state.bridges != palette.bridges || state.overlaps != palette.overlaps ||
+          state.drawElim != palette.drawElim)
+        reLayoutModel( ! palette.bridges, ! palette.overlaps, palette.drawElim,
                          palette.compressMax, palette.stretchMax );
 
       numLive = paletteDialog->liveCount();
