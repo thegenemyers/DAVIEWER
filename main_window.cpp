@@ -1697,6 +1697,8 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                             { ae = ae+tspace;
                               xf = x1 + ae*hbp;
                               vl = (trace[pt]*20.)/(ae-ab);
+                              if (vl >= 20)
+                                vl = 19;
 			      // if (ae-ab >= 20)
                                 // vl = (trace[pt]*40.)/((ae-ab) + trace[pt+1]);
                               // else
@@ -1711,7 +1713,9 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                             { ae = ae + tspace;
                               if (ae > aend)
                                 { xf = x1 + aend*hbp;
-                                  vl = (trace[pt]*20.)/(ae-ab);
+                                  vl = (trace[pt]*20.)/(aend-ab);
+                                  if (vl >= 20)
+                                    vl = 19;
                                   // if (aend-ab >= 20)
                                     // vl = (trace[pt]*40.)/((aend-ab) + trace[pt+1]);
                                   // else
@@ -1754,7 +1758,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                             { ae = ae + tspace;
                               if (ae > aend)
                                 { xf = x1 + aend*hbp;
-                                  vl = (trace[pt]*100.)/(ae-ab);
+                                  vl = (trace[pt]*100.)/(aend-ab);
                                   // if (aend-ab >= 20)
                                     // vl = (trace[pt]*200.)/((aend-ab) + trace[pt+1]);
                                   // else

@@ -648,8 +648,8 @@ static void OPEN_MASKS(char *path, char *extn)
                         Load_Track(MODEL.db1,extn);
                   fclose(anno);
                 }
-             }
-          fclose(data);
+              fclose(data);
+            }
         }
       *dot = '.';
     }
