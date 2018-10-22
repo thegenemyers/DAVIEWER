@@ -787,7 +787,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
       rulerT1 = 30.*dataWidth()/(model->last - model->first);
       rulerT2 =  2.*dataWidth()/(model->last - model->first);
 
-      free(bound);
+      delete bound;
     }
 
   //  Paint background
@@ -4209,7 +4209,7 @@ void PaletteDialog::writeView(Palette_State &state, QString &view)
   QString name = QFileDialog::getOpenFileName(this,	\
                     tr(title),dir,tr(suffix));		\
   if ( ! name.isNull())					\
-    { free(a);						\
+    { delete (a);					\
       (a) = new QFileInfo(name);			\
       (e)->setText((a)->fileName());			\
       (f) = (e)->text();				\
@@ -4279,10 +4279,10 @@ void OpenDialog::activateSubset(int state)
     { MainWindow::warning(									\
              tr("File ")+(ninfo)->absoluteFilePath()+tr(" does not exist"),			\
              this,MainWindow::WARNING,tr("OK"));						\
-      free(ninfo);										\
+      delete ninfo;										\
       return;											\
     }												\
-  free(info);											\
+  delete info;											\
   (info) = ninfo;
 
 void OpenDialog::lasCheck() { CHECKCHANGE(lasInfo,lasFile,lasText) }
@@ -4322,10 +4322,10 @@ void OpenDialog::lastCheck()
     { MainWindow::warning(									\
              tr("File ")+(ninfo)->absoluteFilePath()+tr(" does not exist"),			\
              this,MainWindow::WARNING,tr("OK"));						\
-      free(ninfo);										\
+      delete ninfo;										\
       return;											\
     }												\
-  free(info);											\
+  delete info;											\
   (info) = ninfo;
 
 void OpenDialog::aboutTo()

@@ -602,7 +602,8 @@ error:
 
 static int scanLAS(FILE *input, int *first, int *last)
 { Overlap _ovl, *ovl = &_ovl;
-  int     j, novl, tlen;
+  int     j, tlen;
+  int64   novl;
 
   fread(&novl,sizeof(int64),1,input);
   fread(&TRACE_SPACING,sizeof(int),1,input);
