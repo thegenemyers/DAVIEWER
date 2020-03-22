@@ -1,3 +1,4 @@
+QMAKE_SPEC = macx-clang
 CONFIG += release
 QMAKE_CXXFLAGS += -fvisibility=hidden -Wall -Wno-unused-result
 QMAKE_CFLAGS += -DINTERACTIVE -Wall -Wno-unused-result

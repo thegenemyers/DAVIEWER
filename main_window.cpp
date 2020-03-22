@@ -8,6 +8,8 @@ extern "C" {
 #include "align.h"
 }
 
+#undef HIFI
+
 #include "main_window.h"
 
 #define DAVIEW_MIN_WIDTH   500   //  Minimum display window width & height
@@ -346,7 +348,7 @@ void MyCanvas::assignColor()
   else
     { i = (read[haloed].flags & DB_QV);
       avail[i] = true;
-      read[haloed].flags &= (DB_BEST | DB_CSS);
+      read[haloed].flags &= (DB_BEST | DB_CCS);
       update();
     }
 }
@@ -822,7 +824,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
       int         tIndex[palette->nmasks];
       int         readRow, firstBRow;
 
-      QPen     cPen, dPen, rPen, hPen, ePen, qPen[20], mPen[20], pPen[20];
+      QPen     cPen, dPen, rPen, hPen, ePen, qPen[10], mPen[10], pPen[20];
       QColor   stretch [21];
       QColor   compress[21];
       double   stfact, cmfact;
@@ -988,11 +990,6 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                     qPen[j].setCapStyle(Qt::FlatCap);
                     qPen[j].setColor(palette->qualColor[j]);
                   }
-                for (j = 10; j < 20; j++)
-                  { qPen[j].setWidth(2);
-                    qPen[j].setCapStyle(Qt::FlatCap);
-                    qPen[j].setColor(palette->qualColor[9]);
-                  }
               }
             else
               for (j = 0; j < 3; j++)
@@ -1042,11 +1039,6 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                   { mPen[j].setWidth(2);
                     mPen[j].setCapStyle(Qt::FlatCap);
                     mPen[j].setColor(palette->matchColor[j]);
-                  }
-                for (j = 10; j < 20; j++)
-                  { mPen[j].setWidth(2);
-                    mPen[j].setCapStyle(Qt::FlatCap);
-                    mPen[j].setColor(palette->matchColor[9]);
                   }
               }
             else
@@ -1418,7 +1410,13 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                     if (ae > aend)
                       ae = aend;
                     xf = x1 + ae*hbp;
+#ifdef HIFI
+                    vl = dataQV[pt++];
+#else
                     vl = dataQV[pt++]/5;
+#endif
+                    if (vl >= 10)
+                      vl = 9;
                     painter.setPen(qPen[vl]);
                     painter.drawLine(xs,y,xf,y);
                     xs = xf;
@@ -1696,9 +1694,13 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                         { if (ae < ab)
                             { ae = ae+tspace;
                               xf = x1 + ae*hbp;
+#ifdef HIFI
+                              vl = (trace[pt]*100.)/(ae-ab);
+#else
                               vl = (trace[pt]*20.)/(ae-ab);
-                              if (vl >= 20)
-                                vl = 19;
+#endif
+                              if (vl >= 10)
+                                vl = 9;
 			      // if (ae-ab >= 20)
                                 // vl = (trace[pt]*40.)/((ae-ab) + trace[pt+1]);
                               // else
@@ -1713,9 +1715,13 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                             { ae = ae + tspace;
                               if (ae > aend)
                                 { xf = x1 + aend*hbp;
+#ifdef HIFI
+                                  vl = (trace[pt]*100.)/(aend-ab);
+#else
                                   vl = (trace[pt]*20.)/(aend-ab);
-                                  if (vl >= 20)
-                                    vl = 19;
+#endif
+                                  if (vl >= 10)
+                                    vl = 9;
                                   // if (aend-ab >= 20)
                                     // vl = (trace[pt]*40.)/((aend-ab) + trace[pt+1]);
                                   // else
@@ -1726,7 +1732,13 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                                   break;
                                 }
                               xf = x1 + ae*hbp;
+#ifdef HIFI
+                              vl = trace[pt];
+#else
                               vl = trace[pt]/5;
+#endif
+                              if (vl >= 10)
+                                vl = 9;
                               pt += 2;
                               painter.setPen(mPen[vl]);
                               painter.drawLine(xs,y,xf,y);
@@ -1809,7 +1821,13 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                                   be = aln->bbpos;
                                 ae = mapToA(-1,aln,trace,tspace,be,0);
                                 xf = x1 + ae*hbp;
+#ifdef HIFI
+                                vl = dataQV[pt++];
+#else
                                 vl = dataQV[pt++]/5;
+#endif
+                                if (vl >= 10)
+                                  vl = 9;
                                 painter.setPen(qPen[vl]);
                                 painter.drawLine(xs,y,xf,y);
                                 xs = xf;
@@ -1847,7 +1865,13 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                                   be = aln->bepos;
                                 ae = mapToA(-1,aln,trace,tspace,be,0);
                                 xf = x1 + ae*hbp;
+#ifdef HIFI
+                                vl = dataQV[pt++];
+#else
                                 vl = dataQV[pt++]/5;
+#endif
+                                if (vl >= 10)
+                                  vl = 9;
                                 painter.setPen(qPen[vl]);
                                 painter.drawLine(xs,y,xf,y);
                                 xs = xf;

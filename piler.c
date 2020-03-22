@@ -631,6 +631,7 @@ static void OPEN_MASKS(char *path, char *extn)
 { char *dot, *dot2;
   FILE *data, *anno;
   int   size;
+  DAZZ_TRACK *track;
 
   dot = rindex(extn,'.');
   if (dot != NULL && strcmp(dot,".anno") == 0)
@@ -646,7 +647,9 @@ static void OPEN_MASKS(char *path, char *extn)
                 { if (fread(&size,sizeof(int),1,anno) == 1)
                     if (fread(&size,sizeof(int),1,anno) == 1)
                       if (size == 0)
-                        Load_Track(MODEL.db1,extn);
+                        { track = Open_Track(MODEL.db1,extn);
+                          Load_All_Track_Data(track);
+                        }
                   fclose(anno);
                 }
               fclose(data);
@@ -776,31 +779,33 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
  
     n = MODEL.db2->nreads;
     for (i = 0; i < n; i++)
-      read[i].flags &= (DB_CSS | DB_BEST);
+      read[i].flags &= (DB_CCS | DB_BEST);
   }
 
   { int kind;
 
     if (Check_Track(MODEL.db1,"prof",&kind) > -2)
-      { MODEL.prf = Load_Track(MODEL.db1,"prof");
+      { MODEL.prf = Open_Track(MODEL.db1,"prof");
         if (MODEL.prf == NULL)
           { Close_DB(MODEL.db1);
             if (MODEL.db2 != MODEL.db1)
               Close_DB(MODEL.db2);
             return (Ebuffer);
           }
+        Load_All_Track_Data(MODEL.prf);
       }
     else
       MODEL.prf = NULL;
 
     if (Check_Track(MODEL.db1,"qual",&kind) > -2)
-      { MODEL.qvs = Load_Track(MODEL.db1,"qual");
+      { MODEL.qvs = Open_Track(MODEL.db1,"qual");
         if (MODEL.qvs == NULL)
           { Close_DB(MODEL.db1);
             if (MODEL.db2 != MODEL.db1)
               Close_DB(MODEL.db2);
             return (Ebuffer);
           }
+        Load_All_Track_Data(MODEL.qvs);
       }
     else
       MODEL.qvs = NULL;
