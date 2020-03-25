@@ -401,8 +401,8 @@ static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_exp
   a    = first-1;
   omax = m = n = 0;
   smax = 0;
-  while (ovl.aread < last)
-    { while (a < ovl.aread)
+  while (1)
+    { while (a < ovl.aread && a < last)
         { int j, b, e, p;
 
           if (a >= first)
@@ -422,6 +422,9 @@ static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_exp
             }
 
           a += 1;
+          if (a >= last)
+            break;
+
           pile[a].first  = n; 
           pile[a].where  = pos;
           pile[a].offset = ftello(input) - OvlIOSize;
@@ -431,6 +434,9 @@ static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_exp
           m    = n;
           pos += reads[a].rlen + PILE_SPACING;
         }
+
+      if (ovl.aread >= last)
+        break;
 
       local[n].bread = (ovl.bread << 1);
       if (COMP(ovl.flags))
@@ -694,7 +700,7 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
       { if (rindex(Alas,'/') != NULL)
           Alas = rindex(Alas,'/')+1;
         EPRINTF(EPLACE,"%s: Cannot open file %s\n",Prog_Name,Alas);
-        return (Ebuffer);
+        return (EPLACE);
       }
 
     if (scanLAS(input,&la_first,&la_last))
@@ -702,13 +708,13 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
           Alas = rindex(Alas,'/')+1;
         EPRINTF(EPLACE,"%s: LAS file %s has no overlaps !\n",Prog_Name,Alas);
         fclose(input);
-        return (Ebuffer);
+        return (EPLACE);
       }
     fclose(input);
- 
+
     dbfile = Fopen(Adb,"r");
     if (dbfile == NULL)
-      return (Ebuffer);
+      return (EPLACE);
     if (fscanf(dbfile,DB_NFILE,&nfiles) != 1)
       goto junk;
     for (i = 0; i < nfiles; i++)
@@ -736,18 +742,18 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
 
     if (first >= 0)
       { if (first >= db_last)
-          { EPRINTF(EPLACE,"First requested read %d is > last read in las block %d\n",
-                           first+1,db_last);
-            return (Ebuffer);
+          { EPRINTF(EPLACE,"%s: First requested read %d is > last read, %d, in las block\n",
+                           Prog_Name,first+1,db_last);
+            return (EPLACE);
           }
         else if (first > db_first)
           db_first = first;
       }
     if (last >= 0)
       { if (last <= db_first)
-          { EPRINTF(EPLACE,"Last requested read %d is < first read in las block %d\n",
-                           last,db_first+1);
-            return (Ebuffer);
+          { EPRINTF(EPLACE,"%s: Last requested read %d is < first read, %d, in las block\n",
+                           Prog_Name,last,db_first+1);
+            return (EPLACE);
           }
         else if (last < db_last)
           db_last = last;
@@ -758,21 +764,21 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
 
   MODEL.db1 = &_db1;
   if (Open_DB(Adb,MODEL.db1) < 0)
-    return (Ebuffer);
+    return (EPLACE);
   if (Bdb == NULL)
     MODEL.db2 = MODEL.db1;
   else
     { MODEL.db2 = &_db2;
       if (Open_DB(Bdb,MODEL.db2) < 0)
         { Close_DB(MODEL.db1);
-          return (Ebuffer);
+          return (EPLACE);
         }
       Trim_DB(MODEL.db2);
     }
   Trim_DB(MODEL.db1);
 
   if (List_DB_Files(Adb,OPEN_MASKS))
-    return (Ebuffer);
+    return (EPLACE);
 
   { int        i, n;
     DAZZ_READ *read = MODEL.db2->reads;
@@ -790,7 +796,7 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
           { Close_DB(MODEL.db1);
             if (MODEL.db2 != MODEL.db1)
               Close_DB(MODEL.db2);
-            return (Ebuffer);
+            return (EPLACE);
           }
         Load_All_Track_Data(MODEL.prf);
       }
@@ -803,7 +809,7 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
           { Close_DB(MODEL.db1);
             if (MODEL.db2 != MODEL.db1)
               Close_DB(MODEL.db2);
-            return (Ebuffer);
+            return (EPLACE);
           }
         Load_All_Track_Data(MODEL.qvs);
       }
@@ -818,7 +824,7 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
       Close_DB(MODEL.db1);
       if (MODEL.db2 != MODEL.db1)
         Close_DB(MODEL.db2);
-      return (Ebuffer);
+      return (EPLACE);
     }
 
   { DAZZ_TRACK *t, *u, *v;
@@ -849,5 +855,5 @@ junk:
   EPRINTF(EPLACE,"%s: Stub file %s is junk!\n",Prog_Name,Adb);
 error:
   fclose(dbfile);
-  return (Ebuffer);
+  return (EPLACE);
 }

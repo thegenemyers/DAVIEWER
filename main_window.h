@@ -43,6 +43,7 @@ public:
 
 protected:
   void mouseReleaseEvent(QMouseEvent *ev);
+  void mousePressEvent(QMouseEvent *ev);
 };
 
 class MyCanvas : public QWidget
@@ -74,6 +75,7 @@ protected:
 private slots:
   void assignColor();
   // void showAlignment();
+  void hidingMenu();
 
 private:
   int  pick(int x, int y, int &aread, int &bread);
@@ -91,6 +93,7 @@ private:
   bool   avail[DB_QV+1];
   QColor colors[DB_QV+1];
 
+  bool        menuLock;
   bool        buttonDown;
   int         mouseX;
   int         mouseY;

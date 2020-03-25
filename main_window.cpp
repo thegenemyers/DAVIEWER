@@ -80,10 +80,14 @@ MyMenu::MyMenu(QWidget *parent) : QMenu(parent) { }
 
 void MyMenu::mouseReleaseEvent(QMouseEvent *ev)
 { QAction *act = actionAt(ev->pos());
+
   if (act != NULL)
     act->trigger();
-  hide();
+  QCoreApplication::sendEvent(parent(),ev);
 }
+
+void MyMenu::mousePressEvent(QMouseEvent *ev)
+{ QCoreApplication::sendEvent(parent(),ev); }
 
 int MyCanvas::digits(int a, int b)
 { int l;
@@ -421,6 +425,7 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
   setMouseTracking(true);
 
   buttonDown = false;
+  menuLock   = false;
 
   QPalette pal = popup->palette();
   pal.setBrush(QPalette::Disabled,QPalette::Text,QBrush(Qt::black));
@@ -429,10 +434,15 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
 
   connect(colorAct, SIGNAL(triggered()), this, SLOT(assignColor()));
   // connect(alignAct, SIGNAL(triggered()), this, SLOT(showAlignment()));
+
+  connect(popup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
+  connect(annup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
 }
 
 void MyCanvas::mouseMoveEvent(QMouseEvent *event)
-{ if (buttonDown)
+{ if (menuLock)
+    return;
+  if (buttonDown)
     { int xpos = event->x();
       int ypos = event->y();
       double xdel = hscale*(xpos-mouseX);
@@ -480,13 +490,18 @@ void MyCanvas::mouseReleaseEvent(QMouseEvent *event)
 { (void) event;
   buttonDown = false;
   setCursor(Qt::ArrowCursor);
+  if ( ! menuLock)
+    { popup->hide();
+      annup->hide();
+    }
 }
+
+void MyCanvas::hidingMenu()
+{ menuLock = false; }
 
 void MyCanvas::mousePressEvent(QMouseEvent *event)
 { DataModel *model   = getModel();
   MyScroll  *scroll  = (MyScroll *) parent();
-
-  QWidget::mousePressEvent(event);
 
 /*
   printf("  At (%d,%d)",event->x(),event->y());
@@ -500,6 +515,11 @@ void MyCanvas::mousePressEvent(QMouseEvent *event)
     printf(" CTRL");
   printf("\n");
 */
+
+  if (menuLock)
+    { menuLock = false;
+      return;
+    }
 
   if (event->y() >= rect().height()-rulerHeight)
 
@@ -643,6 +663,9 @@ void MyCanvas::mousePressEvent(QMouseEvent *event)
               colorAct->setText(tr("Color"));
             else
               colorAct->setText(tr("Uncolor"));
+
+            menuLock = ((event->modifiers() & Qt::SHIFT) != 0);
+
             popup->exec(event->globalPos());
           }
 
@@ -665,6 +688,9 @@ void MyCanvas::mousePressEvent(QMouseEvent *event)
                                             .arg(data[bst]).arg(data[bst+1]));
               }
             mline->setText(astr);
+
+            menuLock = ((event->modifiers() & Qt::SHIFT) != 0);
+
             annup->exec(event->globalPos());
           }
 
@@ -4434,11 +4460,7 @@ void OpenDialog::setView()
 }
 
 int OpenDialog::getView()
-{ int sel;
-  sel = viewList->currentIndex();
-  MainWindow::cview = sel;
-  return (sel);
-}
+{ return (viewList->currentIndex()); }
 
 void OpenDialog::getState(Open_State &state)
 {
@@ -4687,6 +4709,7 @@ MainWindow::MainWindow(MainWindow *origin) : QMainWindow()
     queryEntry->setFixedHeight(24);
     queryEntry->setFrame(false);
     queryEntry->setFont(QFont(tr("Monaco")));
+    queryEntry->setToolTip(tr("# [- #]       view these piles\nC # (, #)*  color these reads"));
 
   QPalette redPal;
     redPal.setColor(QPalette::Text,Qt::red);
@@ -5075,13 +5098,12 @@ int PaletteDialog::loadTracks(Palette_State &state, DataModel *model)
 
 void MainWindow::openFiles()
 { Open_State state;
-  int        vidx;
 
   openDialog->setView();
   openDialog->getState(state);
   if (openDialog->exec() == QDialog::Accepted)
     { openDialog->getState(dataset);
-      vidx = openDialog->getView();
+      cview = openDialog->getView();
 
       if (openDialog->openDataSet(palette.bridges,palette.overlaps,palette.drawElim,
                                   palette.compressMax,palette.stretchMax ))
@@ -5090,9 +5112,9 @@ void MainWindow::openFiles()
 
           numLive = paletteDialog->loadTracks(palette,model);
 
-          if (vidx > 0)
+          if (cview > 0)
             { paletteDialog->putState(palette);
-              paletteDialog->readView(palette,views[vidx-2]);
+              paletteDialog->readView(palette,views[cview-2]);
             }
 
           for (j = 0; j < frames.length(); j++)
@@ -5401,9 +5423,9 @@ void MainWindow::readAndApplySettings()
 
     views.clear();
     h = settings.value("nviews",0).toInt();
+    cview = settings.value("cview",0).toInt();
     for (j = 0; j < h; j++)
       views.append( settings.value(tr("view.%1").arg(j)).toString() );
-    cview = 0;
   settings.endGroup();
 
   resize(size);
@@ -5450,6 +5472,7 @@ void MainWindow::writeSettings()
       settings.setValue("queryVisible",false);
 
     settings.setValue(tr("nviews"),views.length());
+    settings.setValue(tr("cview"),cview);
     for (j = 0; j < views.length(); j++)
       settings.setValue(tr("view.%1").arg(j),views[j]);
   settings.endGroup();
