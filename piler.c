@@ -30,33 +30,29 @@
 static int       FIRSTCALL = 1;
 static int       UNDEFINED = 1;
 static DataModel MODEL;
+static DAZZ_DB   DB1;
+static DAZZ_DB   DB2;
 
 int PANEL_SIZE;
 
-int dataWidth()
-{ if (UNDEFINED)
+int dataWidth(DataModel *model)
+{ if (model == NULL)
     return (1000000);
-  return (MODEL.pile[MODEL.last].where);
+  return (model->pile[model->last].where);
 }
 
-int dataHeight()
-{ if (UNDEFINED)
+int dataHeight(DataModel *model)
+{ if (model == NULL)
     return (256);
-  return (MODEL.depth);
+  return (model->depth);
 }
 
-int readSpan(int read1, int read2, int *beg, int *end)
-{ if (read1 < MODEL.first || read2 > MODEL.last)
+int readSpan(DataModel *model, int read1, int read2, int *beg, int *end)
+{ if (read1 < model->first || read2 > model->last)
     return (1);
-  *beg = MODEL.pile[read1].where - PILE_SPACING/2;
-  *end = MODEL.pile[read2-1].where + MODEL.db1->reads[read2-1].rlen + PILE_SPACING/2;
+  *beg = model->pile[read1].where - PILE_SPACING/2;
+  *end = model->pile[read2-1].where + model->db1->reads[read2-1].rlen + PILE_SPACING/2;
   return (0);
-}
-
-DataModel *getModel()
-{ if (UNDEFINED)
-    return (NULL);
-  return (&MODEL);
 }
 
 static LA *LOCAL;
@@ -107,7 +103,6 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap, int elim,
   (void) LEFTMOST;
   (void) BIGGEST;
 
-  LOCAL = MODEL.local;
   last  = pile[1].first;
 
   if (pile->first == last) return (0);
@@ -290,41 +285,52 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap, int elim,
 
   LOCAL[last].bread = blast;
 
+#ifdef DEBUG_LAYOUT
+  for (i = pile->first; i < last; i++)
+    { printf("%5d: %d %d",i,(LOCAL[i].btip&INIT_FLAG)!=0,(LOCAL[i].btip&LINK_FLAG)!=0);
+      if ((LOCAL[i].btip&INIT_FLAG)!=0)
+        printf(" B=%d%c",LOCAL[i].bread>>2,(LOCAL[i].bread&0x1)?'c':'n');
+      else
+        printf(" @%d",LOCAL[i].bread);
+      printf(" @%d\n",LOCAL[i].level);       
+    }
+#endif
+
   return (rtop);
 }
 
-int reLayoutModel(int nolink, int nolap, int elim, int max_comp, int max_expn)
+int reLayoutModel(DataModel *model, int nolink, int nolap, int elim, int max_comp, int max_expn)
 { int   *rail;
   int    depth;
   double comp_factor, expn_factor;
   int    a, n;
 
-  if (UNDEFINED)
+  if (model == NULL)
     return (0);
 
-  rail = (int *) Malloc(sizeof(int)*MODEL.omax,"Allocating layout vector");
+  rail = (int *) Malloc(sizeof(int)*model->omax,"Allocating layout vector");
   if (rail == NULL)
     return (1);
 
   comp_factor = 1. - max_comp/100.;
   expn_factor = 1. + max_expn/100.;
 
+  LOCAL = model->local;
+
   depth = 0;
-  for (a = MODEL.first; a < MODEL.last; a++)
-    { n = layoutPile(MODEL.pile+a,rail,nolink,nolap,elim,comp_factor,expn_factor);
+  for (a = model->first; a < model->last; a++)
+    { n = layoutPile(model->pile+a,rail,nolink,nolap,elim,comp_factor,expn_factor);
       if (n > depth)
         depth = n;
     }
 
   free(rail);
   
-  MODEL.depth = depth;
+  model->depth = depth;
   return (0);
 }
 
 static int64 OvlIOSize = sizeof(Overlap) - sizeof(void *);
-static int   TRACE_SPACING;
-static int   TBYTES;
 
 static int tiplen(int ae, int be)
 { int tip;
@@ -341,10 +347,13 @@ static int tiplen(int ae, int be)
   return (tip);
 }
 
-static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_expn)
+static int buildModel(DataModel *model, int64 novl, int64 toff,
+                      int nolink, int nolap, int elim, int max_comp, int max_expn)
 { int        first, last;
   FILE      *input;
   DAZZ_READ *reads;
+  int        tspace;
+  int        tbytes;
 
   LA   *local;
   Pile *pile;
@@ -352,39 +361,31 @@ static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_exp
   int  *panels, *plists;
 
   Overlap ovl;
-  int64   novl;
   int     a, pos;
   int     omax, n, m;
   int64   smax, tlen;
   int     btip, etip;
   int     npan, nspl, nlas;
 
-  reads = MODEL.db1->reads;
-  input = MODEL.input;
-  first = MODEL.first;
-  last  = MODEL.last;
+  reads = model->db1->reads;
+  input = model->input;
+  first = model->first;
+  last  = model->last;
 
   rewind(input);
-  fread(&novl,sizeof(int64),1,input);
-  fread(&TRACE_SPACING,sizeof(int),1,input);
-  if (TRACE_SPACING <= TRACE_XOVR && TRACE_SPACING != 0)
-    TBYTES = sizeof(uint8);
+  fread(&smax,sizeof(int64),1,input);
+  fread(&tspace,sizeof(int),1,input);
+  if (tspace <= TRACE_XOVR && tspace != 0)
+    tbytes = sizeof(uint8);
   else
-    TBYTES = sizeof(uint16);
-  if (TRACE_SPACING > 0)
-    PANEL_SIZE = ((PANEL_TARGET-1)/TRACE_SPACING+1)*TRACE_SPACING;
+    tbytes = sizeof(uint16);
+  if (tspace > 0)
+    PANEL_SIZE = ((PANEL_TARGET-1)/tspace+1)*tspace;
   else
     PANEL_SIZE = ((PANEL_TARGET-1)/100+1)*100;
 
+  fseek(input,toff-OvlIOSize,SEEK_SET);
   Read_Overlap(input,&ovl);
-  if (ovl.aread >= first)
-    MODEL.first = first = ovl.aread;
-  else
-    while (ovl.aread < first)
-      { fseek(input,TBYTES*ovl.path.tlen,SEEK_CUR);
-        Read_Overlap(input,&ovl);
-        novl -= 1;
-      }
 
   local = (LA *) Malloc(novl*sizeof(LA),"Allocating alignments");
   if (local == NULL)
@@ -422,16 +423,17 @@ static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_exp
             }
 
           a += 1;
-          if (a >= last)
-            break;
-
           pile[a].first  = n; 
           pile[a].where  = pos;
           pile[a].offset = ftello(input) - OvlIOSize;
           pile[a].panels = npan;
           if (n-m > omax)
             omax = n-m;
-          m    = n;
+          m = n;
+
+          if (a >= last)
+            break;
+
           pos += reads[a].rlen + PILE_SPACING;
         }
 
@@ -445,7 +447,7 @@ static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_exp
       local[n].bepos = ovl.path.bepos;
       local[n].btip  = btip = tiplen(ovl.path.abpos,ovl.path.bbpos);
       local[n].etip  = etip = tiplen(reads[ovl.aread].rlen-ovl.path.aepos,
-                                     MODEL.db2->reads[ovl.bread].rlen-ovl.path.bepos);
+                                     model->db2->reads[ovl.bread].rlen-ovl.path.bepos);
       local[n].abpos = ovl.path.abpos - btip;
       local[n].aepos = ovl.path.aepos + etip;
       local[n].toff  = ftell(input);
@@ -458,24 +460,19 @@ static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_exp
    
       n += 1;
 
-      tlen = TBYTES*ovl.path.tlen;
+      tlen = tbytes*ovl.path.tlen;
       if (smax < tlen)
         smax = tlen;
       fseeko(input,tlen,SEEK_CUR);
 
-      if (feof(input))
-        break;
       if (Read_Overlap(input,&ovl))
-        break;
+        ovl.aread = last;
     }
 
-  { int j, b, e, p;
+  pile[last].where  -= PILE_SPACING/2;
+  pile[last].offset += OvlIOSize;
 
-    if (a < last-1)
-      { MODEL.last = last = a+1;
-        pile = (Pile *) Realloc(pile+first,((last-first)+1)*sizeof(Pile),"Reallocating piles");
-        pile -= first;
-      }
+  { int j, b, e, p;
 
     if (a >= first)
       { if (reads[a].rlen < PANEL_FUDGE)
@@ -492,41 +489,14 @@ static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_exp
         nspl += 1;
         npan += p+1;
       }
-
-    pile[last].first  = n;
-    pile[last].where  = pos;
-    pile[last].offset = ftello(input) - OvlIOSize;
-    pile[last].panels = npan;
-    if (n-m > omax)
-      omax = n-m;
-    pile[last].where  -= PILE_SPACING/2;
-    pile[last].offset += OvlIOSize;
-
-    if (n < novl)
-      local = (LA *) Realloc(local,n*sizeof(LA),"Allocating alignments");
-  }
-
-  { LA   *temp;
-
     nlas = n + nlas;
-
-    panels = (int *) Malloc((npan+1)*sizeof(int),"Panels");
-    if (panels == NULL)
-      goto error;
-
-    plists = (int *) Malloc(nlas*sizeof(int),"Panel Lists");
-    if (plists == NULL)
-      goto error;
-
-    temp = (LA *) Realloc(local,(n+1)*sizeof(LA),"Finalizing alignments");
-    if (temp == NULL)
-      goto error;
-    local = temp;
-    
-    tbuffer = Malloc(smax,"Allocating trace buffer");
-    if (tbuffer == NULL)
-      goto error;
   }
+
+  panels = (int *) Malloc((npan+1)*sizeof(int),"Panels");
+  plists = (int *) Malloc(nlas*sizeof(int),"Panel Lists");
+  tbuffer = Malloc(smax,"Allocating trace buffer");
+  if (panels == NULL || plists == NULL || tbuffer == NULL)
+    goto error;
 
   { int  a, k;
     int *manels;
@@ -583,22 +553,17 @@ static int buildModel(int nolink, int nolap, int elim, int max_comp, int max_exp
     panels[0] = 0;
   }
 
-  MODEL.local  = local;
-  MODEL.pile   = pile;
-  MODEL.omax   = omax;
-  MODEL.tbuf   = tbuffer;
-  MODEL.tspace = TRACE_SPACING;
-  MODEL.tbytes = TBYTES;
-  MODEL.panels = panels;
-  MODEL.plists = plists;
+  model->local  = local;
+  model->pile   = pile;
+  model->omax   = omax;
+  model->tbuf   = tbuffer;
+  model->tspace = tspace;
+  model->tbytes = tbytes;
+  model->panels = panels;
+  model->plists = plists;
 
-  UNDEFINED = 0;
-  if (reLayoutModel(nolink,nolap,elim,max_comp,max_expn))
-    { UNDEFINED = 1;
-      goto error;
-    }
-
-  return (0);
+  if ( ! reLayoutModel(model,nolink,nolap,elim,max_comp,max_expn))
+    return (0);
 
 error:
   free(local);
@@ -606,31 +571,99 @@ error:
   return (1);
 }
 
-static int scanLAS(FILE *input, int *first, int *last)
+static int64 scanLAS(FILE *input, int *first, int *last, int *all, int64 *off)
 { Overlap _ovl, *ovl = &_ovl;
   int     j, tlen;
-  int64   novl;
+  int64   novl, aovl, toff;
+  int     tspace, tbytes;
+  int     rfirst, rlast;
+  int     afirst, alast;
+  int     bfirst, blast;
 
-  fread(&novl,sizeof(int64),1,input);
-  fread(&TRACE_SPACING,sizeof(int),1,input);
-  if (TRACE_SPACING <= TRACE_XOVR && TRACE_SPACING != 0)
-    TBYTES = sizeof(uint8);
+  if (fread(&novl,sizeof(int64),1,input) != 1)
+    return (-1);
+  if (fread(&tspace,sizeof(int),1,input) != 1)
+    return (-1);
+  if (tspace <= TRACE_XOVR && tspace != 0)
+    tbytes = sizeof(uint8);
   else
-    TBYTES = sizeof(uint16);
+    tbytes = sizeof(uint16);
 
-  Read_Overlap(input,ovl);
-  tlen = ovl->path.tlen;
-  fseeko(input,tlen*TBYTES,SEEK_CUR);
-  *first = *last = ovl->aread;
+  rfirst = *first;
+  rlast  = *last;
+  if (rfirst < 0)
+    rfirst = 0;
+  if (rlast < 0)
+    rlast = 0x7fffffff;
 
-  for (j = 1; j < novl; j++)
-    { Read_Overlap(input,ovl);
+  aovl = 0;
+  afirst = bfirst = 0x7fffffff;
+  alast  = blast  = 0;
+  for (j = 0; j < novl; j++)
+    { if (Read_Overlap(input,ovl))
+        return (-1);
+      alast = ovl->aread;
+      if (ovl->bread < bfirst)
+        bfirst = ovl->bread;
+      else if (ovl->bread > blast)
+        blast = ovl->bread;
+      if (j == 0)
+        afirst = alast;
+      if (rfirst <= alast && alast < rlast)
+        { if (rfirst >= 0)
+            { toff = ftello(input);
+              rfirst = -1;
+            }
+          aovl += 1;
+        }
       tlen = ovl->path.tlen;
-      fseeko(input,tlen*TBYTES,SEEK_CUR);
-      *last = ovl->aread;
+      fseeko(input,tlen*tbytes,SEEK_CUR);
     }
 
-  return (novl == 0);
+  *all   = (bfirst >= afirst && blast <= alast);
+  *first = afirst;
+  *last  = alast;
+  *off   = toff;
+  return (aovl);
+}
+
+static int64 scanPile(FILE *input, int read, int64 *off)
+{ Overlap _ovl, *ovl = &_ovl;
+  int     j, tlen;
+  int64   novl, aovl, toff;
+  int     tspace, tbytes;
+  int     aread, first;
+
+  if (fread(&novl,sizeof(int64),1,input) != 1)
+    return (-1);
+  if (fread(&tspace,sizeof(int),1,input) != 1)
+    return (-1);
+  if (tspace <= TRACE_XOVR && tspace != 0)
+    tbytes = sizeof(uint8);
+  else
+    tbytes = sizeof(uint16);
+
+  first = 1;
+  aovl  = 0;
+  for (j = 0; j < novl; j++)
+    { if (Read_Overlap(input,ovl))
+        return (-1);
+      aread = ovl->aread;
+      if (aread > read)
+        break;
+      if (read <= aread)
+        { if (first)
+            { toff  = ftello(input);
+              first = 0;
+            }
+          aovl += 1;
+        }
+      tlen = ovl->path.tlen;
+      fseeko(input,tlen*tbytes,SEEK_CUR);
+    }
+
+  *off = toff;
+  return (aovl);
 }
 
 static void OPEN_MASKS(char *path, char *extn)
@@ -665,120 +698,231 @@ static void OPEN_MASKS(char *path, char *extn)
     }
 }
 
-char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
-                int nolink, int nolap, int elim, int max_comp, int max_expn)
-{ static char buffer[2*MAX_NAME+100];
-  static DAZZ_DB _db1;
-  static DAZZ_DB _db2;
+DataModel *openClone(char *Alas, int bread,
+                     int nolink, int nolap, int elim, int max_comp, int max_expn, char **mesg)
+{ DataModel *clone;
+  int        cblock;
+  int64      novl, off;
 
-  FILE *dbfile;
+  *mesg = EPLACE;
+
+  //  MODEL cannot be undefined and bread is in DB if this is called
+
+  clone = Malloc(sizeof(DataModel),"Allocating data model");
+  if (clone == NULL)
+    return (NULL);
+
+  *clone = MODEL;
+
+  if (MODEL.block != 0)
+    { char *root, *path, *bptr;
+
+      for (cblock = 1; cblock <= MODEL.stub->nblocks; cblock++)
+        if (MODEL.stub->tblocks[cblock-1] <= bread && bread < MODEL.stub->tblocks[cblock])
+          break;
+   
+      root  = Root(Alas,".las");
+      path  = PathTo(Alas);
+      bptr  = rindex(root,'.');
+      *bptr = '\0';
+      clone->input = fopen(Catenate(path,"/",root,Numbered_Suffix(".",cblock,".las")),"r");
+      *bptr = '.';
+      free(path);
+      free(root);
+      clone->block = cblock;
+    }
+  else
+    { clone->input = fopen(Alas,"r");
+      clone->block = 0;
+    }
+
+  novl = scanPile(clone->input,bread,&off);
+  rewind(clone->input);
+
+  clone->first = bread;
+  clone->last  = bread+1;
+
+  if (buildModel(clone,novl,off,nolink,nolap,elim,max_comp,max_expn))
+    { fclose(clone->input);
+      free(clone);
+    }
+
+  clone->nref = 0;
+  MODEL.nref += 1;
+
+  return (clone);
+}
+
+char *freeClone(DataModel *clone)
+{ fclose(clone->input);
+  free(clone->local);
+  free(clone->pile+clone->first);
+  free(clone->tbuf);
+
+  free(clone);
+  MODEL.nref -= 1;
+  return (NULL);
+}
+
+DataModel *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
+                     int nolink, int nolap, int elim, int max_comp, int max_expn, char **mesg)
+{ DAZZ_STUB *stub;
+  int64      novl, off;
+  FILE      *input;
 
   if (FIRSTCALL)
     { FIRSTCALL = 0;
       Prog_Name = Strdup("DaViewer","");
+      MODEL.nref = 1;
     }
 
+  *mesg = EPLACE;
+
   if ( ! UNDEFINED)
-    { Close_DB(MODEL.db1);
-      if (MODEL.db1 != MODEL.db2)
-        Close_DB(MODEL.db2);
+    { if (MODEL.nref != 1)
+        { EPRINTF(EPLACE,"%s: Cannot change data set until all clones are closed\n",Prog_Name);
+          return (NULL);
+        }
       fclose(MODEL.input);
       free(MODEL.local);
       free(MODEL.pile+MODEL.first);
       free(MODEL.tbuf);
+      if (MODEL.db1 != MODEL.db2)
+        Close_DB(MODEL.db2);
+      Close_DB(MODEL.db1);
+      Free_DB_Stub(MODEL.stub);
     }
   UNDEFINED = 1;
 
-  { int   i, nfiles, nblocks, cutoff, all, oindx;
-    int64 size;
-    int   la_first, la_last;
+  { int   cblock;
+    int   la_first, la_last, all;
     int   db_first, db_last;
-    FILE *input;
+    char *root, *path;
 
-    input = fopen(Alas,"r");
+    root  = Root(Alas,".las");
+    path  = PathTo(Alas);
+    input = fopen(Catenate(path,"/",root,".las"),"r");
     if (input == NULL)
-      { if (rindex(Alas,'/') != NULL)
-          Alas = rindex(Alas,'/')+1;
-        EPRINTF(EPLACE,"%s: Cannot open file %s\n",Prog_Name,Alas);
-        return (EPLACE);
+      { EPRINTF(EPLACE,"%s: Cannot open file %s/%s.las\n",Prog_Name,path,root);
+        free(path);
+        free(root);
+        return (NULL);
+      }
+    free(path);
+    free(root);
+
+    la_first = first;
+    la_last  = last;
+    novl = scanLAS(input,&la_first,&la_last,&all,&off);
+    if (novl < 0)
+      { EPRINTF(EPLACE,"%s: LAS file %s econding error !\n",Prog_Name,Alas);
+        goto error_las;
+      }
+    if (novl == 0)
+      { EPRINTF(EPLACE,"%s: LAS file %s has no overlaps !\n",Prog_Name,Alas);
+        goto error_las;
       }
 
-    if (scanLAS(input,&la_first,&la_last))
-      { if (rindex(Alas,'/') != NULL)
-          Alas = rindex(Alas,'/')+1;
-        EPRINTF(EPLACE,"%s: LAS file %s has no overlaps !\n",Prog_Name,Alas);
-        fclose(input);
-        return (EPLACE);
-      }
-    fclose(input);
+    stub = Read_DB_Stub(Adb,DB_STUB_BLOCKS);
+    if (stub == NULL)
+      goto error_las;
 
-    dbfile = Fopen(Adb,"r");
-    if (dbfile == NULL)
-      return (EPLACE);
-    if (fscanf(dbfile,DB_NFILE,&nfiles) != 1)
-      goto junk;
-    for (i = 0; i < nfiles; i++)
-      if (fgets(buffer,2*MAX_NAME+100,dbfile) == NULL)
-        goto junk;
-    if (fscanf(dbfile,DB_NBLOCK,&nblocks) != 1)
-      { if (feof(dbfile))
-          { EPRINTF(EPLACE,"%s: Database has not been split!",Prog_Name);
-            goto error;
-          }
-        goto junk;
-      }
-    if (fscanf(dbfile,DB_PARAMS,&size,&cutoff,&all) != 3)
-      goto junk;
-
-    for (i = 0; i <= nblocks; i++)
-      { if (fscanf(dbfile,DB_BDATA,&oindx,&db_last) != 2)
-          goto junk;
-        if (la_first >= db_last)
-          db_first = db_last; 
-        if (la_last < db_last)
+    for (cblock = stub->nblocks; cblock > 0; cblock--)
+      { if (stub->tblocks[cblock-1] <= la_first && la_last < stub->tblocks[cblock])
           break;
       }
-    fclose(dbfile);
+    if (cblock == 0 || stub->nblocks == 1)
+      { db_first = 0;
+        db_last  = stub->tblocks[stub->nblocks];
+        if (!all)
+          { if (rindex(Alas,'/') != NULL)
+              Alas = rindex(Alas,'/')+1;
+            EPRINTF(EPLACE,"%s: LAS file %s must either be for a block or all of DB !\n",
+                           Prog_Name,Alas);
+            goto error_stub;
+          }
+        cblock = 0;
+      }
+    else
+      { char *bptr, *fptr;
+        int   part;
+
+        db_first = stub->tblocks[cblock-1];
+        db_last  = stub->tblocks[cblock];
+        root  = Root(Alas,".las");
+        path  = PathTo(Alas);
+        bptr  = rindex(root,'.');
+        if (bptr != NULL && bptr[1] != '\0' && bptr[1] != '-')
+          { part = strtol(bptr+1,&fptr,10);
+            if (*fptr != '\0' || part == 0)
+              part = 0;
+            else
+              *bptr = '\0';
+          }
+        else
+          part = 0;
+        free(path);
+        free(root);
+        if (part == 0)
+          { EPRINTF(EPLACE,"%s: %s is not an .las block file\n",Prog_Name,root);
+            goto error_stub;
+          }
+        if (part != cblock)
+          { EPRINTF(EPLACE,"%s: The block %d identified for %s does not match\n",
+                           Prog_Name,cblock,root);
+            goto error_stub;
+          }
+      }
 
     if (first >= 0)
-      { if (first >= db_last)
-          { EPRINTF(EPLACE,"%s: First requested read %d is > last read, %d, in las block\n",
-                           Prog_Name,first+1,db_last);
-            return (EPLACE);
+      { if (first < db_first)
+          { EPRINTF(EPLACE,"%s: First requested read %d is < first read, %d, in las block\n",
+                           Prog_Name,first+1,db_first+1);
+            goto error_stub;
           }
-        else if (first > db_first)
-          db_first = first;
       }
+    else
+      first = db_first;
     if (last >= 0)
-      { if (last <= db_first)
-          { EPRINTF(EPLACE,"%s: Last requested read %d is < first read, %d, in las block\n",
-                           Prog_Name,last,db_first+1);
-            return (EPLACE);
+      { if (last > db_last)
+          { if (cblock == 0)
+              EPRINTF(EPLACE,"%s: Last requested read %d is > last read, %d, in the database\n",
+                             Prog_Name,last,db_last);
+            else
+              EPRINTF(EPLACE,"%s: Last requested read %d is > last read, %d, in las block\n",
+                             Prog_Name,last,db_last);
+            goto error_stub;
           }
-        else if (last < db_last)
-          db_last = last;
       }
-    MODEL.first = db_first;
-    MODEL.last  = db_last;
+    else
+      last = db_last;
+
+    MODEL.stub  = stub;
+    MODEL.first = first;
+    MODEL.last  = last;
+    MODEL.block = cblock;
+    MODEL.input = input;
+
+    rewind(input);
   }
 
-  MODEL.db1 = &_db1;
+  MODEL.db1 = &DB1;
   if (Open_DB(Adb,MODEL.db1) < 0)
-    return (EPLACE);
+    goto error_stub;
   if (Bdb == NULL)
     MODEL.db2 = MODEL.db1;
   else
-    { MODEL.db2 = &_db2;
+    { MODEL.db2 = &DB2;
       if (Open_DB(Bdb,MODEL.db2) < 0)
         { Close_DB(MODEL.db1);
-          return (EPLACE);
+          goto error_stub;
         }
       Trim_DB(MODEL.db2);
     }
   Trim_DB(MODEL.db1);
 
   if (List_DB_Files(Adb,OPEN_MASKS))
-    return (EPLACE);
+    goto error_db;
 
   { int        i, n;
     DAZZ_READ *read = MODEL.db2->reads;
@@ -793,11 +937,7 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
     if (Check_Track(MODEL.db1,"prof",&kind) > -2)
       { MODEL.prf = Open_Track(MODEL.db1,"prof");
         if (MODEL.prf == NULL)
-          { Close_DB(MODEL.db1);
-            if (MODEL.db2 != MODEL.db1)
-              Close_DB(MODEL.db2);
-            return (EPLACE);
-          }
+          goto error_db;
         Load_All_Track_Data(MODEL.prf);
       }
     else
@@ -806,26 +946,15 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
     if (Check_Track(MODEL.db1,"qual",&kind) > -2)
       { MODEL.qvs = Open_Track(MODEL.db1,"qual");
         if (MODEL.qvs == NULL)
-          { Close_DB(MODEL.db1);
-            if (MODEL.db2 != MODEL.db1)
-              Close_DB(MODEL.db2);
-            return (EPLACE);
-          }
+          goto error_db;
         Load_All_Track_Data(MODEL.qvs);
       }
     else
       MODEL.qvs = NULL;
   }
 
-  MODEL.input = fopen(Alas,"r");
-
-  if (buildModel(nolink,nolap,elim,max_comp,max_expn))
-    { fclose(MODEL.input);
-      Close_DB(MODEL.db1);
-      if (MODEL.db2 != MODEL.db1)
-        Close_DB(MODEL.db2);
-      return (EPLACE);
-    }
+  if (buildModel(&MODEL,novl,off,nolink,nolap,elim,max_comp,max_expn))
+    goto error_db;
 
   { DAZZ_TRACK *t, *u, *v;
     int         j;
@@ -847,13 +976,15 @@ char *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
   }
 
   UNDEFINED = 0;
-  return (NULL);
+  return (&MODEL);
 
-junk:
-  if (rindex(Adb,'/') != NULL)
-    Adb = rindex(Adb,'/')+1;
-  EPRINTF(EPLACE,"%s: Stub file %s is junk!\n",Prog_Name,Adb);
-error:
-  fclose(dbfile);
-  return (EPLACE);
+error_db:
+  if (MODEL.db2 != MODEL.db1)
+    Close_DB(MODEL.db2);
+  Close_DB(MODEL.db1);
+error_stub:
+  Free_DB_Stub(stub);
+error_las:
+  fclose(input);
+  return (NULL);
 }

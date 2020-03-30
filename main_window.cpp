@@ -135,8 +135,7 @@ int MyCanvas::find_mask(int beg, int *a, int l, int r)
 }
 
 int MyCanvas::pick(int x, int y, int &aread, int &bread)
-{ DataModel *model   = getModel();
-  MyScroll  *scroll  = (MyScroll *) parent();
+{ MyScroll  *scroll  = (MyScroll *) parent();
 
   DAZZ_DB *db1, *db2;
   int      first, last;
@@ -327,8 +326,11 @@ void MyCanvas::haloUpdate(bool ison)
     }
 }
 
+void MyCanvas::setModel(DataModel *m)
+{ model = m; }
+
 void MyCanvas::assignColor()
-{ DAZZ_READ *read = getModel()->db2->reads;
+{ DAZZ_READ *read = model->db2->reads;
   int        cidx = read[haloed].flags & DB_QV;
   int        i;
   static QColor newColor = QColor(255,125,255);
@@ -358,7 +360,7 @@ void MyCanvas::assignColor()
 }
 
 void MyCanvas::setColor(QColor &color, int read)
-{ DAZZ_READ *reads = getModel()->db2->reads;
+{ DAZZ_READ *reads = model->db2->reads;
   int        cidx  = reads[read].flags & DB_QV;
   int i;
 
@@ -383,9 +385,42 @@ void MyCanvas::setColor(QColor &color, int read)
 void MyScroll::setColor(QColor &color, int read)
 { mycanvas->setColor(color,read); }
 
-// void MyCanvas::showAlignment()
-// { printf("align stub\n"); fflush(stdout);
-// }
+void MyCanvas::showPile()
+{ DataModel  *pile; 
+  MainWindow *main;
+  char       *v;
+
+  Open_State    *os = &MainWindow::dataset;
+  Palette_State *ps = &MainWindow::palette;
+
+  pile = openClone( os->lasInfo->absoluteFilePath().toLatin1().data(),
+                    haloed,!ps->bridges,!ps->overlaps,ps->drawElim,
+                    ps->compressMax,ps->stretchMax,&v);
+
+  if (pile == NULL)
+    { MainWindow::warning(tr(v+10),this,MainWindow::ERROR,tr("OK"));
+      return;
+    }
+
+  main = new MainWindow(NULL);
+
+  main->setModel(pile);
+  main->setWindowTitle(tr("Pile - %1").arg(haloed));
+  main->update();
+
+  main->raise();
+  main->show();
+}
+
+void MainWindow::setModel(DataModel *pile)
+{ model = pile;
+  myscroll->setModel(pile);
+  myscroll->setRange(dataWidth(pile),dataHeight(pile)+5+MainWindow::numLive);
+  if (dataWidth(pile) > 1000000)
+    myscroll->hsToRange(0,1000000);
+  else
+    myscroll->hsToRange(0,dataWidth(pile));
+}
 
 MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
 { int i;
@@ -394,9 +429,9 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
     colorAct->setToolTip(tr("Assign a color to this read"));
     colorAct->setFont(QFont(tr("Monaco"),11));
 
-  // alignAct = new QAction(tr("Alignment"),this);
-    // alignAct->setToolTip(tr("Show alignment for this match"));
-    // alignAct->setFont(QFont(tr("Monaco"),11));
+  viewAct = new QAction(tr("View Pile"),this);
+    viewAct->setToolTip(tr("View pile for this read"));
+    viewAct->setFont(QFont(tr("Monaco"),11));
 
   aline = new QAction(tr(""),this);
     aline->setFont(QFont(tr("Monaco"),11));
@@ -409,7 +444,7 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
   popup = new MyMenu(this);
     popup->addAction(aline);
     popup->addAction(bline);
-    // popup->addAction(alignAct);
+    popup->addAction(viewAct);
     popup->addAction(colorAct);
 
   mline = new QAction(tr(""),this);
@@ -426,6 +461,7 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
 
   buttonDown = false;
   menuLock   = false;
+  model      = NULL;
 
   QPalette pal = popup->palette();
   pal.setBrush(QPalette::Disabled,QPalette::Text,QBrush(Qt::black));
@@ -433,7 +469,7 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
   annup->setPalette(pal);
 
   connect(colorAct, SIGNAL(triggered()), this, SLOT(assignColor()));
-  // connect(alignAct, SIGNAL(triggered()), this, SLOT(showAlignment()));
+  connect(viewAct, SIGNAL(triggered()), this, SLOT(showPile()));
 
   connect(popup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
   connect(annup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
@@ -459,7 +495,7 @@ void MyCanvas::mouseMoveEvent(QMouseEvent *event)
       return;
     }
   if (doHalo)
-    { if (event->y() < rect().height()-rulerHeight && getModel() != NULL)
+    { if (event->y() < rect().height()-rulerHeight && model != NULL)
         { int bst, aread, bread;
 
           bst = pick(event->x(),event->y(),aread,bread);
@@ -500,8 +536,7 @@ void MyCanvas::hidingMenu()
 { menuLock = false; }
 
 void MyCanvas::mousePressEvent(QMouseEvent *event)
-{ DataModel *model   = getModel();
-  MyScroll  *scroll  = (MyScroll *) parent();
+{ MyScroll *scroll  = (MyScroll *) parent();
 
 /*
   printf("  At (%d,%d)",event->x(),event->y());
@@ -790,7 +825,6 @@ void MyCanvas::paintEvent(QPaintEvent *event)
 { QPainter       painter(this);
   MyScroll      *scroll  = (MyScroll *) parent();
   Palette_State *palette = &(MainWindow::palette);
-  DataModel     *model   = getModel();
 
   QWidget::paintEvent(event);
 
@@ -812,8 +846,8 @@ void MyCanvas::paintEvent(QPaintEvent *event)
       if (labelWidth > rulerWidth)
         rulerWidth = labelWidth;
 
-      rulerT1 = 30.*dataWidth()/(model->last - model->first);
-      rulerT2 =  2.*dataWidth()/(model->last - model->first);
+      rulerT1 = 30.*dataWidth(model)/(model->last - model->first);
+      rulerT2 =  2.*dataWidth(model)/(model->last - model->first);
 
       delete bound;
     }
@@ -2105,6 +2139,9 @@ void MyScroll::putState(Scroll_State &state)
 
 void MyScroll::haloUpdate(bool ison)
 { mycanvas->haloUpdate(ison); }
+
+void MyScroll::setModel(DataModel *model)
+{ mycanvas->setModel(model); }
 
 void MyScroll::setRange(int h, int v)
 { int    i;
@@ -4424,8 +4461,9 @@ void OpenDialog::aboutTo()
   accept();
 }
 
-bool OpenDialog::openDataSet(int link, int laps, int elim, int comp, int expn)
+DataModel *OpenDialog::openDataSet(int link, int laps, int elim, int comp, int expn, char **mesg)
 { char         *v;
+  DataModel    *m;
   int           f, l;
   Palette_State palette;
     
@@ -4436,19 +4474,15 @@ bool OpenDialog::openDataSet(int link, int laps, int elim, int comp, int expn)
   else
     f = l = -1;
   if (BBox->isChecked())
-    v = openModel( lasInfo->absoluteFilePath().toLatin1().data(),
+    m = openModel( lasInfo->absoluteFilePath().toLatin1().data(),
                    AInfo->absoluteFilePath().toLatin1().data(),
-                   BInfo->absoluteFilePath().toLatin1().data(),f,l,!link,!laps,elim,comp,expn);
+                   BInfo->absoluteFilePath().toLatin1().data(),f,l,!link,!laps,elim,comp,expn,&v);
   else
-    v = openModel( lasInfo->absoluteFilePath().toLatin1().data(),
+    m = openModel( lasInfo->absoluteFilePath().toLatin1().data(),
                    AInfo->absoluteFilePath().toLatin1().data(),
-                   NULL,f,l,!link,!laps,elim,comp,expn);
-
-  if (v != NULL)
-    { MainWindow::warning(tr(v+10),this,MainWindow::ERROR,tr("OK"));
-      return (false);
-    }
-  return (true);
+                   NULL,f,l,!link,!laps,elim,comp,expn,&v);
+  *mesg = v;
+  return (m);
 }
 
 void OpenDialog::setView()
@@ -4701,6 +4735,8 @@ MainWindow::MainWindow(MainWindow *origin) : QMainWindow()
 
   myscroll = new MyScroll(this);
 
+  model = NULL;
+
   QPushButton *queryButton = new QPushButton(tr("Query"));
     queryButton->setFixedWidth(80);
 
@@ -4763,12 +4799,29 @@ MainWindow::MainWindow(MainWindow *origin) : QMainWindow()
 
   createActions();
   createToolBars();
-  createMenus();
+  if (origin == NULL && frames.length() > 0)
+    createCloneMenus();
+  else
+    createMenus();
 
   if (origin == NULL)
-    { readAndApplySettings();
-      paletteDialog->getState(palette);
-      openDialog->getState(dataset);
+    { if (frames.length() == 0)
+        { readAndApplySettings();
+          paletteDialog->getState(palette);
+          openDialog->getState(dataset);
+        }
+      else
+        { removeToolBar(fileToolBar);
+          toolAct->setText(tr("Show Toolbar"));
+
+          drawPanel->removeWidget(queryPanel);
+          drawPanel->removeWidget(hbar);
+          queryPanel->hide();
+          hbar->hide();
+
+          paletteDialog->putState(palette);
+          openDialog->putState(dataset);
+        }
     }
   else
     { resize(origin->size());
@@ -4793,6 +4846,9 @@ MainWindow::MainWindow(MainWindow *origin) : QMainWindow()
           queryAct->setText(tr("Show Query Panel"));
         }
 
+      model = origin->model;
+      myscroll->setModel(model);
+
       { Scroll_State state;
 
         origin->myscroll->getState(state);
@@ -4800,9 +4856,8 @@ MainWindow::MainWindow(MainWindow *origin) : QMainWindow()
         myscroll->update();
       }
 
-      paletteDialog->putState(palette);
-      openDialog->putState(dataset);
-      setWindowTitle(windowTitle());
+      paletteDialog->putState(origin->palette);
+      openDialog->putState(origin->dataset);
 
       show();
     }
@@ -4830,7 +4885,6 @@ void MainWindow::query()
 
   int         read1, read2;
   int         beg, end;
-  DataModel  *model;
   QString     frag;
   char       *text;
   int         r1pos, r2pos, dpos;
@@ -4838,7 +4892,6 @@ void MainWindow::query()
 
   queryEntry->processed(true);
 
-  model = getModel();
   if (model == NULL)
     { queryMesg->setText(tr("^ No model loaded"));
       return;
@@ -4986,21 +5039,43 @@ void MainWindow::query()
       return;
     }
 
-  readSpan(read1-1,read2,&beg,&end);
+  readSpan(model,read1-1,read2,&beg,&end);
   myscroll->hsToRange(beg,end);
 }
 
 void MainWindow::closeEvent(QCloseEvent *event)
-{ int i;
+{ int i, nmain;
 
-  if (frames.length() == 1)
-    writeSettings();
-  else if (frames.length() > 1)
-    for (i = 0; i < frames.length(); i++)
-      if (frames[i] == this)
-        { frames.removeAt(i);
-          break;
-        }
+  if (model != NULL && model->nref == 0)
+    { freeClone(model);
+      for (i = 0; i < frames.length(); i++)
+        if (frames[i] == this)
+          { frames.removeAt(i);
+            break;
+          }
+      event->accept();
+      return;
+    }
+
+  nmain = 0;
+  for (i = 0; i < frames.length(); i++)
+    if (frames[i]->model == NULL || frames[i]->model->nref != 0)
+      nmain += 1;
+
+  if (nmain == 1)
+    { writeSettings();
+      for (i = frames.length()-1; i >= 0; i--)
+        if (frames[i] != this)
+          frames[i]->close();
+      event->accept();
+      return;
+    }
+
+  for (i = 0; i < frames.length(); i++)
+    if (frames[i] == this)
+      { frames.removeAt(i);
+        break;
+      }
   event->accept();
 }
 
@@ -5098,6 +5173,14 @@ int PaletteDialog::loadTracks(Palette_State &state, DataModel *model)
 
 void MainWindow::openFiles()
 { Open_State state;
+  char      *mesg;
+  int        j;
+
+  if (model != NULL && model->nref > 1)
+    { for (j = frames.length()-1; j >= 0; j--)
+        if (frames[j] != NULL && frames[j]->model->nref == 0)
+          frames[j]->close();
+    }
 
   openDialog->setView();
   openDialog->getState(state);
@@ -5105,11 +5188,10 @@ void MainWindow::openFiles()
     { openDialog->getState(dataset);
       cview = openDialog->getView();
 
-      if (openDialog->openDataSet(palette.bridges,palette.overlaps,palette.drawElim,
-                                  palette.compressMax,palette.stretchMax ))
-        { DataModel    *model = getModel();
-          int           j;
-
+      model = openDialog->openDataSet(palette.bridges,palette.overlaps,palette.drawElim,
+                                      palette.compressMax,palette.stretchMax,&mesg);
+      if (model != NULL)
+        {
           numLive = paletteDialog->loadTracks(palette,model);
 
           if (cview > 0)
@@ -5118,19 +5200,32 @@ void MainWindow::openFiles()
             }
 
           for (j = 0; j < frames.length(); j++)
-            { frames[j]->myscroll->setRange(dataWidth(),dataHeight()+5+numLive);
-              if (dataWidth() > 1000000)
+            { frames[j]->myscroll->setRange(dataWidth(model),dataHeight(model)+5+numLive);
+              if (dataWidth(model) > 1000000)
                 frames[j]->myscroll->hsToRange(0,1000000);
+              else
+                frames[j]->myscroll->hsToRange(0,dataWidth(model));
               frames[j]->openDialog->putState(dataset);
               frames[j]->paletteDialog->symmetricDB(! dataset.asym);
               frames[j]->paletteDialog->putState(palette);
-              frames[j]->update();
               frames[j]->setWindowTitle(tr("DaViewer - %1").arg(dataset.lasText));
+              frames[j]->model = model;
+              frames[j]->myscroll->setModel(model);
+              frames[j]->update();
             }
         }
+      else
+        { for (j = 0; j < frames.length(); j++)
+            { frames[j]->model = model;
+              frames[j]->myscroll->setModel(model);
+              frames[j]->update();
+            }
+
+          MainWindow::warning(tr(mesg+10),this,MainWindow::ERROR,tr("OK"));
+        }
     }
-  else
-    openDialog->putState(state);
+  // else
+    // openDialog->putState(state);
 }
 
 void MainWindow::openPalette()
@@ -5146,20 +5241,20 @@ void MainWindow::openPalette()
 
       if (state.bridges != palette.bridges || state.overlaps != palette.overlaps ||
           state.drawElim != palette.drawElim)
-        reLayoutModel( ! palette.bridges, ! palette.overlaps, palette.drawElim,
-                         palette.compressMax, palette.stretchMax );
+        reLayoutModel(model, ! palette.bridges, ! palette.overlaps, palette.drawElim,
+                             palette.compressMax, palette.stretchMax );
 
       numLive = paletteDialog->liveCount();
       for (i = 0; i < frames.length(); i++)
-        { frames[i]->myscroll->setRange(dataWidth(),dataHeight()+5+numLive);
+        { frames[i]->myscroll->setRange(dataWidth(model),dataHeight(model)+5+numLive);
           if (state.showHalo != palette.showHalo)
             frames[i]->myscroll->haloUpdate(palette.showHalo);
           frames[i]->myscroll->update();
           frames[i]->paletteDialog->putState(palette);
         }
     }
-  else
-    paletteDialog->putState(state);
+  // else
+    // paletteDialog->putState(state);
 }
 
 void MainWindow::openCopy()
@@ -5172,38 +5267,46 @@ void MainWindow::toggleToolBar()
 { int i;
 
   if (fileToolBar->isVisible())
-    for (i = 0; i < frames.length(); i++)
-      { frames[i]->toolArea = frames[i]->toolBarArea(frames[i]->fileToolBar);
-        frames[i]->removeToolBar(frames[i]->fileToolBar);
-        frames[i]->toolAct->setText(tr("Show Toolbar"));
-      }
+    { for (i = 0; i < frames.length(); i++)
+        if (frames[i]->model == NULL || frames[i]->model->nref != 0)
+          { frames[i]->toolArea = frames[i]->toolBarArea(frames[i]->fileToolBar);
+            frames[i]->removeToolBar(frames[i]->fileToolBar);
+            frames[i]->toolAct->setText(tr("Show Toolbar"));
+          }
+    }
   else
-    for (i = 0; i < frames.length(); i++)
-      { frames[i]->addToolBar(frames[i]->toolArea,frames[i]->fileToolBar);
-        frames[i]->fileToolBar->setVisible(true);
-        frames[i]->toolAct->setText(tr("Hide Toolbar"));
-      }
+    { for (i = 0; i < frames.length(); i++)
+        if (frames[i]->model == NULL || frames[i]->model->nref != 0)
+          { frames[i]->addToolBar(frames[i]->toolArea,frames[i]->fileToolBar);
+            frames[i]->fileToolBar->setVisible(true);
+            frames[i]->toolAct->setText(tr("Hide Toolbar"));
+          }
+    }
 }
 
 void MainWindow::toggleQuery()
 { int i;
 
   if (drawPanel->count() == 3)
-    for (i = 0; i < frames.length(); i++)
-      { frames[i]->drawPanel->removeWidget(frames[i]->queryPanel);
-        frames[i]->drawPanel->removeWidget(frames[i]->hbar);
-        frames[i]->queryPanel->hide();
-        frames[i]->hbar->hide();
-        frames[i]->queryAct->setText(tr("Show Query"));
-      }
+    { for (i = 0; i < frames.length(); i++)
+        if (frames[i]->model == NULL || frames[i]->model->nref != 0)
+          { frames[i]->drawPanel->removeWidget(frames[i]->queryPanel);
+            frames[i]->drawPanel->removeWidget(frames[i]->hbar);
+            frames[i]->queryPanel->hide();
+            frames[i]->hbar->hide();
+            frames[i]->queryAct->setText(tr("Show Query"));
+          }
+    }
   else
-    for (i = 0; i < frames.length(); i++)
-      { frames[i]->drawPanel->insertWidget(1,frames[i]->hbar);
-        frames[i]->drawPanel->insertWidget(2,frames[i]->queryPanel);
-        frames[i]->queryPanel->show();
-        frames[i]->hbar->show();
-        frames[i]->queryAct->setText(tr("Hide Query"));
-      }
+    { for (i = 0; i < frames.length(); i++)
+        if (frames[i]->model == NULL || frames[i]->model->nref != 0)
+          { frames[i]->drawPanel->insertWidget(1,frames[i]->hbar);
+            frames[i]->drawPanel->insertWidget(2,frames[i]->queryPanel);
+            frames[i]->queryPanel->show();
+            frames[i]->hbar->show();
+            frames[i]->queryAct->setText(tr("Hide Query"));
+          }
+    }
 }
 
 void MainWindow::createActions()
@@ -5395,6 +5498,22 @@ void MainWindow::createMenus()
   QMenu *imageMenu = bar->addMenu(tr("&Image"));
     imageMenu->addAction(tileAct);
     imageMenu->addAction(cascadeAct);
+
+  QMenu *windowMenu = bar->addMenu(tr("&Window"));
+    windowMenu->addAction(fullScreenAct);
+    windowMenu->addAction(minimizeAct);
+    windowMenu->addSeparator();
+    windowMenu->addAction(unminimizeAllAct);
+    windowMenu->addAction(raiseAllAct);
+}
+
+void MainWindow::createCloneMenus()
+{ QMenuBar *bar = menuBar();
+
+  QMenu *fileMenu = bar->addMenu(tr("&File"));
+    fileMenu->addAction(paletteAct);
+    fileMenu->addSeparator();
+    fileMenu->addAction(exitAct);
 
   QMenu *windowMenu = bar->addMenu(tr("&Window"));
     windowMenu->addAction(fullScreenAct);

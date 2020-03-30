@@ -65,6 +65,7 @@ public:
 
   void haloUpdate(bool on);
   void setColor(QColor &color, int read);
+  void setModel(DataModel *model);
 
 protected:
   void paintEvent(QPaintEvent *event);
@@ -74,17 +75,19 @@ protected:
 
 private slots:
   void assignColor();
-  // void showAlignment();
+  void showPile();
   void hidingMenu();
 
 private:
   int  pick(int x, int y, int &aread, int &bread);
 
+  DataModel *model;
+
   MyMenu  *popup;
   MyMenu  *annup;
   QAction *aline;
   QAction *bline;
-  // QAction *alignAct;
+  QAction *viewAct;
   QAction *colorAct;
   QAction *mline;
 
@@ -131,6 +134,7 @@ public:
   void hsToRange(int beg, int end);
 
   void haloUpdate(bool on);
+  void setModel(DataModel *model);
 
   void getState(Scroll_State &state);
   void putState(Scroll_State &state);
@@ -434,7 +438,7 @@ class OpenDialog : public QDialog
 public:
   OpenDialog(QWidget *parent = 0);
 
-  bool openDataSet(int link, int laps, int elim, int comp, int expn);
+  DataModel *openDataSet(int link, int laps, int elim, int comp, int expn, char **mesg);
 
   void getState(Open_State &state);
   void putState(Open_State &state);
@@ -500,6 +504,7 @@ class MainWindow : public QMainWindow
 
 public:
   MainWindow(MainWindow *origin);
+  void setModel(DataModel *model);
 
   typedef enum { INFORM, WARNING, ERROR } MessageKind;
 
@@ -544,8 +549,10 @@ private slots:
 private:
   OpenDialog    *openDialog;
   PaletteDialog *paletteDialog;
+  DataModel     *model;
 
   void createMenus();
+  void createCloneMenus();
   void createActions();
   void createToolBars();
 
