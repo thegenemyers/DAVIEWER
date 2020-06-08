@@ -35,6 +35,9 @@ static DAZZ_DB   DB2;
 
 int PANEL_SIZE;
 
+int symmetric(DataModel *model)
+{ return (model->db1 == model->db2); }
+
 int dataWidth(DataModel *model)
 { if (model == NULL)
     return (1000000);
@@ -148,18 +151,18 @@ static int layoutPile(Pile *pile, int *rail, int nolink, int nolap, int elim,
         for (i = pile->first; i < last; i++)
           if ((LOCAL[i].etip & SUCC_FLAG) != 0)
             { if ((LOCAL[i].etip & EMASK) == EVALU)
-                { if (last >= 0)
+                { if (low >= 0)
                     { LOCAL[i].btip |= LINK_FLAG;
-                      LOCAL[i].level = last;
+                      LOCAL[i].level = low;
                     }
-                  last = i;
+                  low = i;
                 }
             }
           else
             { if ((LOCAL[i].etip & EMASK) == EVALU)
-                last = i;
+                low = i;
               else
-                last = -1;
+                low = -1;
             }
 
       //  Set up reverse link with L-flag only, use I-flag to mark elements already
@@ -834,7 +837,7 @@ DataModel *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
     if (cblock == 0 || stub->nblocks == 1)
       { db_first = 0;
         db_last  = stub->tblocks[stub->nblocks];
-        if (!all)
+        if (!all && (Bdb == NULL || strcmp(Adb,Bdb) == 0))
           { if (rindex(Alas,'/') != NULL)
               Alas = rindex(Alas,'/')+1;
             EPRINTF(EPLACE,"%s: LAS file %s must either be for a block or all of DB !\n",
@@ -909,7 +912,7 @@ DataModel *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
   MODEL.db1 = &DB1;
   if (Open_DB(Adb,MODEL.db1) < 0)
     goto error_stub;
-  if (Bdb == NULL)
+  if (Bdb == NULL || strcmp(Adb,Bdb) == 0)
     MODEL.db2 = MODEL.db1;
   else
     { MODEL.db2 = &DB2;

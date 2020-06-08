@@ -8,9 +8,10 @@ extern "C" {
 #include "align.h"
 }
 
-#undef HIFI
+#define HIFI
 
 #include "main_window.h"
+#include "dot_window.h"
 
 #define DAVIEW_MIN_WIDTH   500   //  Minimum display window width & height
 #define DAVIEW_MIN_HEIGHT  350
@@ -327,7 +328,12 @@ void MyCanvas::haloUpdate(bool ison)
 }
 
 void MyCanvas::setModel(DataModel *m)
-{ model = m; }
+{ model = m;
+  if (m != NULL && symmetric(m))
+    popup->addAction(viewAct);
+  else
+    popup->removeAction(viewAct);
+}
 
 void MyCanvas::assignColor()
 { DAZZ_READ *read = model->db2->reads;
@@ -422,6 +428,24 @@ void MainWindow::setModel(DataModel *pile)
     myscroll->hsToRange(0,dataWidth(pile));
 }
 
+void MyCanvas::showDot()
+{ DotWindow *image;
+  int        alen, blen;
+  char      *aseq, *bseq;
+
+  alen = model->db1->reads[haloA].rlen;
+  blen = model->db2->reads[haloed].rlen;
+  aseq = New_Read_Buffer(model->db1);
+  bseq = New_Read_Buffer(model->db2);
+  Load_Read(model->db1,haloA,aseq,0);
+  Load_Read(model->db2,haloed,bseq,0);
+
+  image = new DotWindow(tr("Read %1 vs Read %2").arg(haloA+1).arg(haloed+1),alen,aseq,blen,bseq);  
+
+  image->raise();
+  image->show();
+}
+
 MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
 { int i;
  
@@ -432,6 +456,10 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
   viewAct = new QAction(tr("View Pile"),this);
     viewAct->setToolTip(tr("View pile for this read"));
     viewAct->setFont(QFont(tr("Monaco"),11));
+
+  dotAct = new QAction(tr("View Dot Plot"),this);
+    dotAct->setToolTip(tr("Create a dot plot between this read and A-read"));
+    dotAct->setFont(QFont(tr("Monaco"),11));
 
   aline = new QAction(tr(""),this);
     aline->setFont(QFont(tr("Monaco"),11));
@@ -445,6 +473,7 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
     popup->addAction(aline);
     popup->addAction(bline);
     popup->addAction(viewAct);
+    popup->addAction(dotAct);
     popup->addAction(colorAct);
 
   mline = new QAction(tr(""),this);
@@ -470,6 +499,7 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
 
   connect(colorAct, SIGNAL(triggered()), this, SLOT(assignColor()));
   connect(viewAct, SIGNAL(triggered()), this, SLOT(showPile()));
+  connect(dotAct, SIGNAL(triggered()), this, SLOT(showDot()));
 
   connect(popup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
   connect(annup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
@@ -538,19 +568,6 @@ void MyCanvas::hidingMenu()
 void MyCanvas::mousePressEvent(QMouseEvent *event)
 { MyScroll *scroll  = (MyScroll *) parent();
 
-/*
-  printf("  At (%d,%d)",event->x(),event->y());
-  if (event->modifiers() & Qt::SHIFT)
-    printf(" SHIFT");
-  if (event->modifiers() & Qt::ALT)
-    printf(" ALT");
-  if (event->modifiers() & Qt::CTRL)
-    printf(" COMM");
-  if (event->modifiers() & Qt::META)
-    printf(" CTRL");
-  printf("\n");
-*/
-
   if (menuLock)
     { menuLock = false;
       return;
@@ -606,10 +623,11 @@ void MyCanvas::mousePressEvent(QMouseEvent *event)
             int     blen, comp, cont;
             QString astr, bstr;
 
+            haloA = aread;
+
             db1   = model->db1;
             db2   = model->db2;
             align = model->local;
-
             comp    = (bread % 2);
             bread >>= 1;
             blen    = db2->reads[bread].rlen;
@@ -3332,7 +3350,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
 
   for (j = 0; j < 10; j++)
     { matchBox[j] = new QToolButton();
-        matchBox[j]->setIconSize(QSize(16,16));
+	    matchBox[j]->setIconSize(QSize(16,16));
         matchBox[j]->setFixedSize(20,20);
         matchBox[j]->setIcon(QIcon(QPixmap(16,16)));
     }
@@ -4785,7 +4803,7 @@ MainWindow::MainWindow(MainWindow *origin) : QMainWindow()
 
     drawPanel = new QVBoxLayout();
       drawPanel->addWidget(myscroll,1);
-      drawPanel->addWidget(hbar,0);
+      // drawPanel->addWidget(hbar,0);
       drawPanel->addWidget(queryPanel,0);
       drawPanel->setSpacing(0);
       drawPanel->setMargin(0);

@@ -76,6 +76,7 @@ protected:
 private slots:
   void assignColor();
   void showPile();
+  void showDot();
   void hidingMenu();
 
 private:
@@ -88,11 +89,12 @@ private:
   QAction *aline;
   QAction *bline;
   QAction *viewAct;
+  QAction *dotAct;
   QAction *colorAct;
   QAction *mline;
 
   bool   doHalo;
-  int    haloed;
+  int    haloed, haloA;
   bool   avail[DB_QV+1];
   QColor colors[DB_QV+1];
 

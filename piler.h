@@ -84,6 +84,7 @@ char *freeClone(DataModel *clone);
 int        reLayoutModel(DataModel *model, int nolink, int nolap, int elim,
                          int max_comp, int max_expn);
 
+int        symmetric(DataModel *model);
 int        dataWidth(DataModel *model);
 int        dataHeight(DataModel *model);
 int        readSpan(DataModel *model, int read1, int read2, int *beg, int *end);
