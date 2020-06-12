@@ -50,11 +50,23 @@ int dataHeight(DataModel *model)
   return (model->depth);
 }
 
-int readSpan(DataModel *model, int read1, int read2, int *beg, int *end)
-{ if (read1 < model->first || read2 > model->last)
+int readSpan(DataModel *model, int read1, int pos1, int read2, int pos2, int *beg, int *end)
+{ if (read1 < model->first+1 || read2 > model->last)
     return (1);
-  *beg = model->pile[read1].where - PILE_SPACING/2;
-  *end = model->pile[read2-1].where + model->db1->reads[read2-1].rlen + PILE_SPACING/2;
+  *beg = model->pile[read1-1].where + pos1;
+  if (pos1 == 0)
+    { if (read1 == read2 && pos2 < model->db1->reads[read1-1].rlen)
+        *beg -= (pos2-pos1)/10;
+     else
+        *beg -= PILE_SPACING/2;
+    }
+  *end = model->pile[read2-1].where + pos2;
+  if (pos2 == model->db1->reads[read2-1].rlen)
+    { if (read1 == read2 && pos1 > 0)
+        *end += (pos2-pos1)/10;
+     else
+        *end += PILE_SPACING/2;
+    }
   return (0);
 }
 

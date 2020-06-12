@@ -709,6 +709,13 @@ void MyCanvas::mousePressEvent(QMouseEvent *event)
             w = digits(alv,blv);
             astr.append(tr(" - %1").arg(alv,w));
             bstr.append(tr(" - %1").arg(blv,w));
+
+            av = model->db1->reads[aread].rlen;
+            bv = model->db2->reads[bread].rlen;
+
+            w = digits(av,bv);
+            astr.append(tr(" [%1]").arg(av,w));
+            bstr.append(tr(" [%1]").arg(bv,w));
   
             aline->setText(astr);
             bline->setText(bstr);
@@ -4898,14 +4905,36 @@ MainWindow::MainWindow(MainWindow *origin) : QMainWindow()
 void MainWindow::clearMesg()
 { queryMesg->setText(tr("")); }
 
+int MainWindow::getSpace(char *text, int i, int len)
+{ while (i < len && isspace(text[i]))
+     i += 1;
+  return (i);
+}
+
+int MainWindow::getInt(char *text, int i, int len, int *val)
+{ if ( ! isdigit(text[i]))
+    { queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a positive number"));
+      return (-1);
+    }
+  *val = 0;
+  while (i < len && isdigit(text[i]))
+    *val = *val * 10 + (text[i++]-'0');
+  while (i < len && isspace(text[i]))
+    i += 1;
+  return (i);
+}
+
 void MainWindow::query()
 { static QColor newColor = QColor(255,125,255);
 
+  int         state;
   int         read1, read2;
+  int         pos1, pos2;
   int         beg, end;
   QString     frag;
   char       *text;
-  int         r1pos, r2pos, dpos;
+  int         r1pos, r2pos;
+  int         p1pos, p2pos;
   int         i, len;
 
   queryEntry->processed(true);
@@ -4919,34 +4948,28 @@ void MainWindow::query()
   text = frag.toLatin1().data();
   len  = frag.length();
 
-  i = 0;
-  while (i < len && isspace(text[i]))
-    i += 1;
+  i = getSpace(text,0,len);
   if (i >= len)
-    { queryMesg->setText(tr("^ Empty request"));
+    { queryMesg->setText(tr("^ Empty query"));
       return;
     }
 
   //  Color query handling
 
   if (text[i] == 'C')
-    { i += 1;
-      while (i < len && isspace(text[i]))
-        i += 1;
-
-      r1pos = i;
+    { r1pos = getSpace(text,i+1,len);
       read2 = model->db2->nreads;
       while (i < len)
         { if ( ! isdigit(text[i]))
             { queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a positive number"));
               return;
             }
-          dpos = i;
+          r2pos = i;
           while (i < len && isdigit(text[i]))
             i += 1;
-          read1 = atoi(text+dpos);
+          read1 = atoi(text+r2pos);
           if (read1 < 1 || read1 > read2)
-            { queryMesg->setText(tr("%1").arg(tr(""),dpos) +
+            { queryMesg->setText(tr("%1").arg(tr(""),r2pos) +
                                  tr("^ Out of range [1,%1]").arg(QString::number(read2)));
               return;
             }
@@ -4990,54 +5013,72 @@ void MainWindow::query()
 
   //  Pile query handling
 
-  if ( ! isdigit(text[i]))
-    { queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a positive number"));
-      return;
-    }
   r1pos = i;
-  while (i < len && isdigit(text[i]))
-    i += 1;
-  while (i < len && isspace(text[i]))
-    i += 1;
-  if (i < len && text[i] == '-')
-    { dpos = i;
-      i += 1; 
-      while (i < len && isspace(text[i]))
-        i += 1;
-      if (i >= len)
-        { queryMesg->setText(tr("%1").arg(tr(""),dpos+1) + tr("^ Expecting a positive number"));
-          return;
-        }
-      if ( ! isdigit(text[i]))
-        { queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a positive number"));
-          return;
-        }
-      r2pos = i;
-      while (i < len && isdigit(text[i]))
-        i += 1;
-      while (i < len && isspace(text[i]))
-        i += 1;
-      if (i < len)
+  i = getInt(text,i,len,&read1);
+  if (i < 0)
+    return;
+
+  read2 = read1;
+  pos1  = pos2 = -1;
+  state = 0;
+  while (i < len)
+    { if (state == 3)
         { queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting end of query"));
           return;
         }
+      else if (text[i] == '-' && state <= 1)
+        { r2pos = getSpace(text,i+1,len);
+          i = getInt(text,r2pos,len,&read2);
+          state = 2;
+        }
+      else if (text[i] == ':' && state%2 == 0)
+        { if (state == 0)
+            { p1pos = getSpace(text,i+1,len);
+              i = getInt(text,p1pos,len,&pos1);
+            }
+          else
+            { p2pos = getSpace(text,i+1,len);
+              i = getInt(text,p2pos,len,&pos2);
+            }
+          state += 1;
+        }
+      else
+        { if (state == 0)
+            queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a dash or colon"));
+          else if (state == 1)
+            queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a dash"));
+          else if (state == 2)
+            queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a colon"));
+          return;
+        }
+      if (i < 0)
+        return;
     }
-  else if (i < len)
-    { queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a dash between two numbers"));
+  if (state == 0)
+    { read2 = read1;
+      r2pos = r1pos;
+      pos2  = model->db1->reads[read2-1].rlen;
+      pos1  = 0;
+    }
+  else if (state == 1)
+    { queryMesg->setText(tr("%1").arg(tr(""),i) + tr("^ Expecting a range"));
       return;
     }
-  else
-    dpos = -1;
-
-  if (dpos < 0) 
-    read1 = read2 = frag.toInt();
-  else
-    { read1 = frag.left(dpos).toInt();
-      read2 = frag.right((len-dpos)-1).toInt();
+  else if (state == 2)
+    { if (pos1 >= 0)
+        { pos2  = read2;
+          p2pos = r2pos;
+          read2 = read1;
+          r2pos = r1pos;
+        }
+      else
+        { pos2 = model->db1->reads[read2-1].rlen;
+          pos1 = 0;
+        }
     }
 
   if (read1 > read2)
-    { queryMesg->setText(tr("%1").arg(tr(""),dpos) + tr("^ first read > second read ?"));
+    { queryMesg->setText(tr("%1").arg(tr(""),r2pos) + tr("^ first read > second read ?"));
       return;
     }
   if (read1 < model->first+1)
@@ -5047,17 +5088,29 @@ void MainWindow::query()
       return;
     }
   if (read2 > model->last)
-    { if (dpos < 0)
-        dpos = r1pos;
-      else
-        dpos = r2pos;
-      queryMesg->setText(tr("%1").arg(tr(""),dpos) +
+    { queryMesg->setText(tr("%1").arg(tr(""),r2pos) +
                          tr("^ Out of range [%1,%2]").
                               arg(QString::number(model->first+1),QString::number(model->last)));
       return;
     }
+  if (pos1 > model->db1->reads[read1-1].rlen)
+    { queryMesg->setText(tr("%1").arg(tr(""),p1pos) +
+                         tr("^ Out of range [%1,%2]").
+                              arg(QString::number(0),QString::number(model->db1->reads[read1-1].rlen)));
+      return;
+    }
+  if (pos2 > model->db1->reads[read2-1].rlen)
+    { queryMesg->setText(tr("%1").arg(tr(""),p2pos) +
+                         tr("^ Out of range [%1,%2]").
+                              arg(QString::number(0),QString::number(model->db1->reads[read2-1].rlen)));
+      return;
+    }
+  if (read1 == read2 && pos1 > pos2)
+    { queryMesg->setText(tr("%1").arg(tr(""),p2pos) + tr("^ first position > second position ?"));
+      return;
+    }
 
-  readSpan(model,read1-1,read2,&beg,&end);
+  readSpan(model,read1,pos1,read2,pos2,&beg,&end);
   myscroll->hsToRange(beg,end);
 }
 

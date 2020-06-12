@@ -87,6 +87,6 @@ int        reLayoutModel(DataModel *model, int nolink, int nolap, int elim,
 int        symmetric(DataModel *model);
 int        dataWidth(DataModel *model);
 int        dataHeight(DataModel *model);
-int        readSpan(DataModel *model, int read1, int read2, int *beg, int *end);
+int        readSpan(DataModel *model, int read1, int pos1, int read2, int pos2, int *beg, int *end);
 
 #endif

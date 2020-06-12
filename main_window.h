@@ -561,6 +561,9 @@ private:
   void readAndApplySettings();
   void writeSettings();
 
+  int  getInt(char *, int, int, int *);
+  int  getSpace(char *, int, int);
+
   QAction *exitAct;
 
   QAction *openAct;
