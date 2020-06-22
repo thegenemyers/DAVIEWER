@@ -4957,7 +4957,7 @@ void MainWindow::query()
   //  Color query handling
 
   if (text[i] == 'C')
-    { r1pos = getSpace(text,i+1,len);
+    { r1pos = i = getSpace(text,i+1,len);
       read2 = model->db2->nreads;
       while (i < len)
         { if ( ! isdigit(text[i]))
