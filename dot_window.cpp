@@ -932,11 +932,19 @@ DotWindow::DotWindow(QString title, int alen, char *aseq, int blen, char *bseq) 
     locatorLayout->addStretch(1);
     locatorLayout->setMargin(0);
 
-  QFrame *panel = new QFrame();
+  QLabel *panel = new QLabel();
     panel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     panel->setFrameStyle(QFrame::StyledPanel|QFrame::Plain);
     panel->setLineWidth(1);
     panel->setAutoFillBackground(true);
+    panel->setText(tr("%1<br>%2<br>%3<br>%4<br>%5<br>%6")
+                         .arg("<b>Over plot area:</b>")
+                         .arg("&nbsp;&nbsp;Click to set focus")
+                         .arg("&nbsp;&nbsp;Push-Drag to pan")
+                         .arg("&nbsp;&nbsp;Shift-Push-Drag for zoom area")
+                         .arg("<b>Over sequences:</b>")
+                         .arg("&nbsp;&nbsp;Left/Right Key to move focus 1bp"));
+    panel->setAlignment(Qt::AlignLeft|Qt::AlignTop);
 
       QPalette panelColor = panel->palette();
         panelColor.setColor(QPalette::Active,QPalette::Window,QColor(200,200,220));
