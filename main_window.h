@@ -9,6 +9,8 @@ extern "C" {
 #include "DB.h"
 }
 
+class DotWindow;
+
 #define SIZE_TICKS 100
 #define MAX_TRACKS 100
 
@@ -77,6 +79,7 @@ private slots:
   void assignColor();
   void showPile();
   void showDot();
+  void showSelfDot();
   void hidingMenu();
 
 private:
@@ -90,11 +93,13 @@ private:
   QAction *bline;
   QAction *viewAct;
   QAction *dotAct;
+  QAction *selfDotAct;
   QAction *colorAct;
   QAction *mline;
 
   bool   doHalo;
   int    haloed, haloA;
+  int    popSel;
   bool   avail[DB_QV+1];
   QColor colors[DB_QV+1];
 
@@ -520,6 +525,7 @@ public:
   static int    frameHeight;
 
   static QList<MainWindow *> frames;
+  static QList<DotWindow *>  plots;
   static Palette_State       palette;
   static Open_State          dataset;
   static int                 numLive;

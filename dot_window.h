@@ -30,6 +30,7 @@ typedef struct
   QRect           view;
   double          zoom;
 
+  Qt::CheckState  fOn;
   QPoint          focus;
   QColor          fColor;
   Qt::CheckState  fViz;
@@ -48,14 +49,6 @@ typedef struct
   char        *Bseq;
   DotList     *dots;
 } DotPlot;
-
-class MarginWidget : public QFrame
-{
-  Q_OBJECT
-
-public:
-  MarginWidget(QWidget *parent = 0, bool vertical = false);
-};
 
 
 class DotLineEdit : public QLineEdit
@@ -79,6 +72,27 @@ private:
   QWidget *mysucc;
 };
 
+class SeqLineEdit : public QLineEdit
+{
+  Q_OBJECT
+
+public:
+  SeqLineEdit(QWidget *parent = 0, int id = 0);
+
+signals:
+  void focusShift(int, int);
+
+protected:
+  void keyPressEvent(QKeyEvent *);
+  void mousePressEvent(QMouseEvent *);
+  void mouseMoveEvent(QMouseEvent *);
+  void mouseReleaseEvent(QMouseEvent *);
+  void enterEvent(QEvent *);
+  void leaveEvent(QEvent *);
+
+private:
+  int  myid;
+};
 
 
 /***************************************************************************************/
@@ -93,11 +107,14 @@ class DotCanvas : public QWidget
 
 public:
   DotCanvas(QWidget *parent = 0);
+  ~DotCanvas();
 
   Frame *shareData(DotState *state, DotPlot *plot);
   bool   zoomView(double zoomDel);
   void   resetView();
   bool   viewToFrame();
+
+  static QVector<QRgb> ctable;
 
 signals:
   void NewFrame(double newZ);
@@ -125,6 +142,9 @@ private:
 
   int          rectW;
   int          rectH;
+
+  QImage      *image;
+  uchar      **raster;
 
   DotPlot     *plot;
   DotState    *state;
@@ -178,10 +198,12 @@ public slots:
 
   void viewChange();
  
+  void focusOnChange();
   void focusChange();
   void focusColorChange();
   void hairsChange();
   void seqChange();
+  void seqRealign();
 
   void locatorChange();
   void locatorColorChange();
@@ -192,10 +214,10 @@ protected:
 public slots:
   void   frameToView(double newZ);
   void   clickToFocus();
+  void   seqMove(int,int);
 
 private slots:
   void fullScreen();
-  void updateWindowMenu();
   void pushState();
   bool checkRangeA();
   bool checkRangeB();
@@ -216,6 +238,11 @@ private:
 
   DotCanvas          *canvas;
 
+  SeqLineEdit        *seqUL;
+  SeqLineEdit        *seqUR;
+  SeqLineEdit        *seqLL;
+  SeqLineEdit        *seqLR;
+
   QAction            *fullScreenAct;
   QAction            *minimizeAct;
   QAction            *zoomInAct;
@@ -230,6 +257,7 @@ private:
   QPoint              Aval;
   QPoint              Bval;
 
+  QCheckBox          *focusOn;
   DotLineEdit        *Fpnt;
   QPoint              Fval;
   QColor              focusColor;

@@ -27,27 +27,6 @@ extern "C" {
 
 static QRect *screenGeometry = NULL;
 
-
-MarginWidget::MarginWidget(QWidget *parent, bool vertical) : QFrame(parent)
-{ if (vertical)
-    { setFixedHeight(CANVAS_MARGIN);
-      setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-    }
-  else
-    { setFixedWidth(CANVAS_MARGIN);
-      setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
-    }
-
-  setFrameShape(QFrame::NoFrame);
-  setAutoFillBackground(true);
-
-  QPalette p = palette();
-    p.setColor(QPalette::Active,QPalette::Window,QColor(0,0,0));
-    p.setColor(QPalette::Inactive,QPalette::Window,QColor(0,0,0));
-    setPalette(p);
-}
-
-
 DotLineEdit::DotLineEdit(QWidget *parent) : QLineEdit(parent) {}
 
 void DotLineEdit::setChain(QWidget *p, QWidget *s)
@@ -56,8 +35,7 @@ void DotLineEdit::setChain(QWidget *p, QWidget *s)
 }
 
 void DotLineEdit::focusOutEvent(QFocusEvent *event)
-{ printf("Lost focus %d\n",event->reason());
-  if (event->reason() <= Qt::BacktabFocusReason)
+{ if (event->reason() <= Qt::BacktabFocusReason)
     emit focusOut();
   QLineEdit::focusOutEvent(event);
 }
@@ -69,7 +47,6 @@ void DotLineEdit::keyPressEvent(QKeyEvent *event)
         mypred->setFocus();
       else
         mysucc->setFocus();
-      printf("key\n");
     }
   else
     QLineEdit::keyPressEvent(event);
@@ -80,6 +57,39 @@ bool DotLineEdit::focusNextPrevChild(bool next)
   return (false);
 }
 
+SeqLineEdit::SeqLineEdit(QWidget *parent, int id) : QLineEdit(parent)
+{ setFixedHeight(20);
+  setStyleSheet("border: 1px solid black");
+  setReadOnly(true);
+  setFont(QFont(tr("Monaco")));
+  myid = id;
+}
+
+void SeqLineEdit::enterEvent(QEvent *)
+{ setFocus(); }
+
+void SeqLineEdit::leaveEvent(QEvent *)
+{ clearFocus(); }
+
+void SeqLineEdit::keyPressEvent(QKeyEvent *event)
+{ int key = event->key();
+  if (key == Qt::Key_Left)
+    emit focusShift(-1,myid);
+  else if (key == Qt::Key_Right)
+    emit focusShift(+1,myid);
+  else
+    return;
+}
+
+void SeqLineEdit::mousePressEvent(QMouseEvent *event)
+{ (void) event; }
+
+void SeqLineEdit::mouseMoveEvent(QMouseEvent *event)
+{ (void) event; }
+
+void SeqLineEdit::mouseReleaseEvent(QMouseEvent *event)
+{ (void) event; }
+
 
 /***************************************************************************************/
 /*                                                                                     */
@@ -87,11 +97,16 @@ bool DotLineEdit::focusNextPrevChild(bool next)
 /*                                                                                     */
 /***************************************************************************************/
 
+DotCanvas::~DotCanvas()
+{ free(raster); }
+
 DotCanvas::DotCanvas(QWidget *parent) : QWidget(parent)
 { setSizePolicy(QSizePolicy::MinimumExpanding,QSizePolicy::MinimumExpanding);
   noFrame = true;
   rubber  = new QRubberBand(QRubberBand::Rectangle, this);
   timer   = new QBasicTimer();
+  image   = NULL;
+  raster  = new uchar *[screenGeometry->height()];
 }
 
 Frame *DotCanvas::shareData(DotState *s, DotPlot *p)
@@ -143,7 +158,7 @@ bool DotCanvas::zoomView(double zoomDel)
     return (false);
 
 #ifdef DEBUG
-  printf("Frame = (%.1f,%.1f) %.1f vs %.1f\n",nX,nY,nW,nH);
+  printf("Frame (zoom) = (%.1f,%.1f) %.1f vs %.1f\n",nX,nY,nW,nH);
 #endif
 
   ASSIGN(frame,nX,nY,nW,nH);
@@ -180,9 +195,9 @@ void DotCanvas::resizeEvent(QResizeEvent *event)
   int oH = oldS.height();
   int nH = newS.height();
 
-  vW += (vW / oW) * (nW-oW);
-  vH += (vH / oH) * (nH-oH);
-  if (vW >= plot->Alen && vH >= plot->Blen)
+  vW = (vW / oW) * nW;
+  vH = (vH / oH) * nH;
+  if (frame.w >= plot->Alen && frame.h >= plot->Blen)
     { if (plot->Alen/vW > plot->Blen/vH)
         { vH = vH*(plot->Alen/vW);
           vW = plot->Alen;
@@ -201,10 +216,14 @@ void DotCanvas::resizeEvent(QResizeEvent *event)
         vX = (plot->Alen-vW)/2.;
       else if (vX < 0)
         vX = 0.;
+else if (vX + vW > plot->Alen)
+  vX = plot->Alen - vW;
       if (vH > plot->Blen)
         vY = (plot->Blen-vH)/2.;
       else if (vY < 0.)
         vY = 0.;
+else if (vY + vH > plot->Blen)
+  vY = plot->Blen - vH;
     }
 
   ASSIGN(frame,vX,vY,vW,vH);
@@ -399,14 +418,18 @@ void DotCanvas::mouseReleaseEvent(QMouseEvent *event)
 #endif
       QRect reg  = rubber->geometry();
       QRect undo = state->view;
-      int xb = frame.x + (reg.x()/(1.*rectW))*frame.w;
-      int yb = frame.y + (reg.y()/(1.*rectH))*frame.h;
-      int xe = frame.x + ((reg.x()+reg.width())/(1.*rectW))*frame.w;
-      int ye = frame.y + ((reg.y()+reg.height())/(1.*rectH))*frame.h;
+      int xb = frame.x + ((reg.x()-20.)/(rectW-40.))*frame.w;
+      int yb = frame.y + ((reg.y()-20.)/(rectH-40.))*frame.h;
+      int xe = frame.x + (((reg.x()-20.)+reg.width())/(rectW-40.))*frame.w;
+      int ye = frame.y + (((reg.y()-20.)+reg.height())/(rectH-40.))*frame.h;
       if (xb < 0) xb = 0;
+      if (xb < frame.x) xb = frame.x;
       if (yb < 0) yb = 0;
+      if (yb < frame.y) yb = frame.y;
       if (xe > plot->Alen) xe = plot->Alen;
+      if (xe > frame.x+frame.w) xe = frame.x+frame.w;
       if (ye > plot->Blen) ye = plot->Blen;
+      if (ye > frame.y+frame.h) ye = frame.y+frame.h;
       state->view = QRect(xb,yb,xe-xb,ye-yb);
 #ifdef DEBUG
       printf("Region select (%d,%d) %d x %d\n",reg.x(),reg.y(),reg.width(),reg.height());
@@ -418,13 +441,21 @@ void DotCanvas::mouseReleaseEvent(QMouseEvent *event)
         state->view = undo;
     }
   else if (nograb)
-    { double ex = event->x();
-      double ey = event->y();
+    { double ex = event->x()-20.;
+      double ey = event->y()-20.;
 #ifdef DEBUG
       printf("Clicked\n");
 #endif
-      int x = frame.x + (ex/rectW)*frame.w;
-      int y = frame.y + (ey/rectH)*frame.h;
+      int x = frame.x + (ex/(rectW-40))*frame.w;
+      int y = frame.y + (ey/(rectH-40))*frame.h;
+      if (x < 0) x = 0;
+      if (x < frame.x) x = frame.x;
+      if (x > plot->Alen) x = plot->Alen;
+      if (x > frame.x+frame.w) x = frame.x+frame.w;
+      if (y < 0) y = 0;
+      if (y < frame.y) y = frame.y;
+      if (y > plot->Blen) y = plot->Blen;
+      if (y > frame.y+frame.h) y = frame.y+frame.h;
       state->focus = QPoint(x,y);
       update();
       emit NewFocus();
@@ -436,12 +467,16 @@ void DotCanvas::mouseReleaseEvent(QMouseEvent *event)
     QApplication::changeOverrideCursor(Qt::ArrowCursor);
 }
 
+QVector<QRgb> DotCanvas::ctable(256);
+
 void DotCanvas::paintEvent(QPaintEvent *event)
 { QPainter painter;
 
   (void) event;
 
   painter.begin(this);
+  painter.setRenderHint(QPainter::Antialiasing,true);
+  painter.setRenderHint(QPainter::SmoothPixmapTransform,true);
 
   if (noFrame)    //  First paint => set Frame (cannot do earlier as do not know size)
     { resetView();
@@ -453,34 +488,26 @@ void DotCanvas::paintEvent(QPaintEvent *event)
   double vW = frame.w;
   double vH = frame.h;
 
-  double xa = rectW/vW;
-  double xb = -vX*(rectW/vW);
+  // printf("Frame = (%g,%g) %g x %g into %d x %d\n",vX,vY,vW,vH,rectW,rectH);
 
-  double ya = rectH/vH;
-  double yb = -vY*(rectH/vH);
+  if (image == NULL || rectW != image->width() || rectH != image->height())
+    { int j;
 
-  QPen dPen;
+      if (image != NULL)
+        delete image;
+      image = new QImage(rectW,rectH,QImage::Format_Indexed8);
+      image->setColorTable(ctable);
+      for (j = 0; j < rectH; j++)
+        raster[j] = image->scanLine(j);
+    }
 
-  painter.fillRect(0,0,rectW,rectH,QBrush(QColor(0,0,0)));
+  // printf("  image = %d x %d\n",image->width(),image->height());
 
-  dPen.setColor(QColor(255,255,255));
-  dPen.setWidth(2);
-  painter.setPen(dPen);
+  image->fill(0);
 
-  scale_plot(plot->dots,&frame,rectW,rectH);
+  render_plot(plot->dots,&frame,rectW,rectH,raster);
 
-  for (int i = 500; i < plot->Alen; i += 500)
-    painter.drawLine(xa*i+xb,yb,xa*i+xb,ya*plot->Blen+yb);
-  for (int j = 0; j < plot->Blen; j += 500)
-    painter.drawLine(xb,ya*j+yb,xa*plot->Alen+xb,ya*j+yb);
-
-  dPen.setColor(QColor(255,255,0));
-  painter.setPen(dPen);
-
-  painter.drawLine(xb+1,yb,xb+1,ya*plot->Blen+yb);
-  painter.drawLine(xa*plot->Alen+xb-1,yb,xa*plot->Alen+xb-1,ya*plot->Blen+yb);
-  painter.drawLine(xb,yb+1,xa*plot->Alen+xb,yb+1);
-  painter.drawLine(xb,ya*plot->Blen+yb-1,xa*plot->Alen+xb,ya*plot->Blen+yb-1);
+  painter.drawImage(QPoint(0,0),*image);
 
   if (state->lViz == Qt::Checked)
     if (vW < plot->Alen*.7 || vH < plot->Blen*.7)
@@ -500,13 +527,13 @@ void DotCanvas::paintEvent(QPaintEvent *event)
           }
             
         if (state->lQuad%2)
-          lX = rectW - (lW + 5);
+          lX = (rectW-20) - (lW + 6);
         else
-          lX = 5;
+          lX = 26;
         if (state->lQuad < 2)
-          lY = 5;
+          lY = 26;
         else
-          lY = rectH - (lH + 5);
+          lY = (rectH-20) - (lH + 6);
 
         painter.drawRect(lX,lY,lW,lH);
 
@@ -530,13 +557,108 @@ void DotCanvas::paintEvent(QPaintEvent *event)
         painter.drawRect(lX+x,lY+y,w,h);
       }
 
-  if (state->focus != QPoint(0,0))
+  double xa = (rectW-44)/vW;
+  double xb = -vX*xa+22;
+
+  double ya = (rectH-44)/vH;
+  double yb = -vY*ya+22;
+
+  { QPen dPen;
+    int  b, w;
+    int  c, h;
+    int  x, y;
+    int  u, v;
+
+    dPen.setColor(QColor(255,255,255));
+    dPen.setWidth(2);
+    painter.setPen(dPen);
+  
+    if (xb < 22)
+      b = 21;
+    else
+      b = xb-1;
+    w = xb + plot->Alen*xa + 1;
+    if (w >= rectW-20)
+      w = rectW-21;
+    w = w-b;
+
+    if (yb < 22)
+      c = 21;
+    else
+      c = yb-1;
+    h = yb + plot->Blen*ya + 1;
+    if (h >= rectH-20)
+      h = rectH-21;
+    h = h-c;
+
+    painter.drawRect(b,c,w,h);
+
+    u = divide_bar((int) ((100./(rectW-40.))*vW));
+
+    if (vX < 0)
+      { x = units[u];
+        y = ((plot->Alen-1)/units[u])*units[u];
+      }
+    else
+      { x = ((((int) vX)/units[u])+1)*units[u];
+        y = ((((int) vX+vW)-1)/units[u])*units[u];
+      }
+    for (; x <= y; x += units[u])
+      { v = xb+xa*x;
+        if (x > plot->Alen)
+          break;
+        painter.drawLine(v,c,v,c-4);
+        painter.drawText(QRect(v-10,c-8,20,4),Qt::AlignHCenter|Qt::AlignBottom|Qt::TextDontClip,
+                         tr("%1%2").arg(x/divot[u]).arg(suffix[u]));
+      }
+
+    if (vY < 0)
+      { x = units[u];
+        y = ((plot->Blen-1)/units[u])*units[u];
+      }
+    else
+      { x = ((((int) vY)/units[u])+1)*units[u];
+        y = ((((int) vY+vH)-1)/units[u])*units[u];
+      }
+
+    painter.save();
+    painter.rotate(-90.);
+    for (; x <= y; x += units[u])
+      { v = yb+ya*x;
+        if (x > plot->Blen)
+          break;
+        painter.drawLine(-v,b,-v,b-4);
+        painter.drawText(QRect(-v-10,b-9,20,4),Qt::AlignHCenter|Qt::AlignBottom|Qt::TextDontClip,
+                         tr("%1%2").arg(x/divot[u]).arg(suffix[u]));
+      }
+    painter.restore();
+  }
+
+  if (state->fOn == Qt::Checked)
     { painter.setPen(state->fColor);
       int x = xa*state->focus.x() + xb;
       int y = ya*state->focus.y() + yb;
       if (state->fViz == Qt::Checked)
-        { painter.drawLine(0,y,rectW,y);
-          painter.drawLine(x,0,x,rectH);
+        { if (xb-2 < 22)
+            if (xa*plot->Alen+xb+2 > rectW-22)
+              painter.drawLine(22,y,rectW-22,y);
+            else
+              painter.drawLine(22,y,xa*plot->Alen+xb+2,y);
+          else
+            if (xa*plot->Alen+xb+2 > rectW-22)
+              painter.drawLine(xb-2,y,rectW-22,y);
+            else
+              painter.drawLine(xb-2,y,xa*plot->Alen+xb+2,y);
+          if (yb-2 < 22)
+            if (ya*plot->Blen+yb+2 > rectH-22)
+              painter.drawLine(x,22,x,rectH-22);
+            else
+              painter.drawLine(x,22,x,ya*plot->Blen+yb+2);
+          else
+            if (ya*plot->Blen+yb+2 > rectH-22)
+              painter.drawLine(x,yb-2,x,rectH-22);
+            else
+              painter.drawLine(x,yb-2,x,ya*plot->Blen+yb+2);
         }
       else
         { painter.drawLine(x-10,y,x+10,y);
@@ -565,12 +687,15 @@ DotWindow::~DotWindow()
 
 DotWindow::DotWindow(QString title, int alen, char *aseq, int blen, char *bseq) : QMainWindow()
 { if (firstTime)
-    { state.kmer = 10;
+    { int j;
+
+      state.kmer = 10;
 
       state.fColor = QColor(255,255,0);
       state.fViz   = Qt::Unchecked;
       state.sViz   = Qt::Unchecked;
 
+      state.fOn    = Qt::Unchecked;
       state.lColor = QColor(255,0,255);
       state.lViz   = Qt::Checked;
       state.lQuad  = TOP_LEFT;
@@ -578,9 +703,17 @@ DotWindow::DotWindow(QString title, int alen, char *aseq, int blen, char *bseq) 
 
       firstTime = false;
       lastState = state;
+
+      for (j = 0; j < 256; j++)
+        DotCanvas::ctable[j] = qRgb(j,j,0);
     }
+  else if ( ! MainWindow::plots.isEmpty())
+    state = MainWindow::plots.last()->state;
   else
     state = lastState;
+
+  if (screenGeometry == NULL)
+    screenGeometry = new QRect(QApplication::desktop()->availableGeometry(this));
 
   state.view.setRect(0,0,alen,blen);
   state.zoom = 1.0;
@@ -595,25 +728,6 @@ DotWindow::DotWindow(QString title, int alen, char *aseq, int blen, char *bseq) 
       canvas = new DotCanvas(this);
 
       frame = canvas->shareData(&state,&plot);
-
-      MarginWidget *leftMargin   = new MarginWidget(this,false);
-      MarginWidget *rightMargin  = new MarginWidget(this,false);
-      MarginWidget *topMargin    = new MarginWidget(this,true);
-      MarginWidget *bottomMargin = new MarginWidget(this,true);
-
-    QHBoxLayout *imageMargin = new QHBoxLayout;
-      imageMargin->addWidget(leftMargin,0);
-      imageMargin->addWidget(canvas,1);
-      imageMargin->addWidget(rightMargin,0);
-      imageMargin->setSpacing(0);
-      imageMargin->setMargin(0);
-
-  QVBoxLayout *imageLayout = new QVBoxLayout;
-    imageLayout->addWidget(topMargin,0);
-    imageLayout->addLayout(imageMargin,1);
-    imageLayout->addWidget(bottomMargin,0);
-    imageLayout->setSpacing(0);
-    imageLayout->setMargin(0);
 
       QLabel *zoomLabel = new QLabel(tr("Zoom: "));
 
@@ -663,9 +777,9 @@ DotWindow::DotWindow(QString title, int alen, char *aseq, int blen, char *bseq) 
         kmerSpin->setMaximum(32);
         kmerSpin->setSingleStep(1);
         kmerSpin->setValue(10);
-        kmerSpin->setFixedWidth(40);
+        kmerSpin->setFixedWidth(50);
         kmerSpin->setAlignment(Qt::AlignRight);
-        kmerSpin->setFocusPolicy(Qt::NoFocus);
+        // kmerSpin->setFocusPolicy(Qt::NoFocus);
 
   QHBoxLayout *kmerLayout = new QHBoxLayout;
     kmerLayout->addWidget(kmerLabel);
@@ -737,6 +851,8 @@ DotWindow::DotWindow(QString title, int alen, char *aseq, int blen, char *bseq) 
     cursorLayout->addStretch(1);
     cursorLayout->setSpacing(0);
 
+      focusOn = new QCheckBox(tr("On"));
+
       focusBox = new QToolButton();
         focusBox->setIconSize(QSize(16,16));
         focusBox->setFixedSize(20,20);
@@ -744,13 +860,14 @@ DotWindow::DotWindow(QString title, int alen, char *aseq, int blen, char *bseq) 
       focusCheck = new QCheckBox(tr("Cross Hairs"));
     
   QHBoxLayout *focusLayout = new QHBoxLayout;
-    focusLayout->addSpacing(48);
+    focusLayout->addWidget(focusOn);
+    focusLayout->addSpacing(12);
     focusLayout->addWidget(focusBox);
     focusLayout->addSpacing(10);
     focusLayout->addWidget(focusCheck);
     focusLayout->addStretch(1);
     focusLayout->setSpacing(0);
-    
+
       seqCheck = new QCheckBox(tr("View sequences"));
 
   QHBoxLayout *seqLayout = new QHBoxLayout;
@@ -844,8 +961,53 @@ DotWindow::DotWindow(QString title, int alen, char *aseq, int blen, char *bseq) 
     controlPart->setLayout(controlLayout);
     controlPart->setSizePolicy(QSizePolicy::Fixed,QSizePolicy::Expanding);
 
+    seqUL = new SeqLineEdit(this,1);
+      seqUL->setAlignment(Qt::AlignRight);
+    seqUR = new SeqLineEdit(this,2);
+      seqUR->setAlignment(Qt::AlignLeft);
+    seqLL = new SeqLineEdit(this,3);
+      seqLL->setAlignment(Qt::AlignRight);
+    seqLR = new SeqLineEdit(this,4);
+      seqLR->setAlignment(Qt::AlignLeft);
+
+      QLabel *Alab = new QLabel(tr(" A: "));
+      QLabel *Blab = new QLabel(tr(" B: "));
+
+    QVBoxLayout *labs = new QVBoxLayout;
+      labs->addWidget(Alab,0);
+      labs->addWidget(Blab,0);
+
+    QVBoxLayout *seqL = new QVBoxLayout;
+      seqL->addWidget(seqUL,0);
+      seqL->addWidget(seqLL,0);
+      seqL->setSpacing(0);
+      seqL->setMargin(0);
+
+    QVBoxLayout *seqR = new QVBoxLayout;
+      seqR->addWidget(seqUR,0);
+      seqR->addWidget(seqLR,0);
+      seqR->setSpacing(0);
+      seqR->setMargin(0);
+
+    QHBoxLayout *seqAll = new QHBoxLayout;
+      seqAll->addLayout(labs,0);
+      seqAll->addLayout(seqL,1);
+      seqAll->addLayout(seqR,1);
+      seqAll->setSpacing(0);
+      seqAll->setMargin(0);
+
+    QWidget *seqPart = new QWidget;
+      seqPart->setLayout(seqAll);
+      seqPart->setSizePolicy(QSizePolicy::Expanding,QSizePolicy::Fixed);
+
+  QVBoxLayout *canLayout = new QVBoxLayout;
+    canLayout->addWidget(canvas,1);
+    canLayout->addWidget(seqPart,0);
+    canLayout->setSpacing(0);
+    canLayout->setMargin(0);
+
   QHBoxLayout *toolLayout = new QHBoxLayout;
-    toolLayout->addLayout(imageLayout,1);
+    toolLayout->addLayout(canLayout,1);
     toolLayout->addWidget(controlPart,0);
     toolLayout->setSpacing(0);
     toolLayout->setMargin(0);
@@ -874,16 +1036,19 @@ DotWindow::DotWindow(QString title, int alen, char *aseq, int blen, char *bseq) 
   connect(Rpush,SIGNAL(clicked()),this,SLOT(viewChange()));
   connect(Fpush,SIGNAL(clicked()),this,SLOT(focusChange()));
 
+  connect(focusOn,SIGNAL(stateChanged(int)),this,SLOT(focusOnChange()));
   connect(focusBox,SIGNAL(clicked()),this,SLOT(focusColorChange()));
   connect(focusCheck,SIGNAL(stateChanged(int)),this,SLOT(hairsChange()));
   connect(seqCheck,SIGNAL(stateChanged(int)),this,SLOT(seqChange()));
 
+  connect(seqUL,SIGNAL(focusShift(int,int)),this,SLOT(seqMove(int,int)));
+  connect(seqUR,SIGNAL(focusShift(int,int)),this,SLOT(seqMove(int,int)));
+  connect(seqLL,SIGNAL(focusShift(int,int)),this,SLOT(seqMove(int,int)));
+  connect(seqLR,SIGNAL(focusShift(int,int)),this,SLOT(seqMove(int,int)));
+
   connect(locatorCheck,SIGNAL(stateChanged(int)),this,SLOT(locatorChange()));
   connect(locatorBox,SIGNAL(clicked()),this,SLOT(locatorColorChange()));
   connect(locatorQuad,SIGNAL(buttonClicked(int)),this,SLOT(locatorChange()));
-
-  if (screenGeometry == NULL)
-    screenGeometry = new QRect(QApplication::desktop()->availableGeometry(this));
 
   createActions();
   createMenus();
@@ -926,27 +1091,6 @@ void DotWindow::createActions()
 void DotWindow::createMenus()
 { QMenuBar *bar = menuBar();
  
-/*
-  QMenu *fileMenu = bar->addMenu(tr("&File"));
-    fileMenu->addAction(manager->openAct);
-    fileMenu->addAction(manager->saveAct);
-    fileMenu->addSeparator();
-    fileMenu->addAction(manager->toolAct);
-    fileMenu->addSeparator();
-    fileMenu->addAction(manager->exitAct);
-
-  QMenu *imageMenu = bar->addMenu(tr("&Image"));
-    imageMenu->addAction(manager->tileAct);
-    imageMenu->addAction(manager->cascadeAct);
-    imageMenu->addSeparator();
-    imageMenu->addAction(manager->nextAct);
-    imageMenu->addAction(manager->keepAct);
-    imageMenu->addSeparator();
-    imageMenu->addAction(manager->xProjAct);
-    imageMenu->addAction(manager->yProjAct);
-    imageMenu->addAction(manager->zProjAct);
-*/
-
   QMenu *windowMenu = bar->addMenu(tr("&Window"));
     windowMenu->addAction(fullScreenAct);
     windowMenu->addAction(minimizeAct);
@@ -967,14 +1111,30 @@ void DotWindow::pushState()
 
   zoomEdit->setText(tr("%1").arg(state.zoom,0,'f',2));
 
-  Fpnt->setText(tr("%1,%2").arg(state.focus.x()).arg(state.focus.y()));
+  focusOn->setCheckState(state.fOn);
+  bool en = (state.fOn != Qt::Unchecked);
+
+  Fpnt->setEnabled(en);
+  focusBox->setEnabled(en);
+  focusCheck->setEnabled(en);
+  seqCheck->setEnabled(en);
+
+  en = (en && state.sViz != Qt::Unchecked);
+
+  seqUL->setEnabled(en);
+  seqUR->setEnabled(en);
+  seqLL->setEnabled(en);
+  seqLR->setEnabled(en);
+
   QPixmap blob = QPixmap(16,16);
-     blob.fill(state.fColor);
+
+  blob.fill(state.fColor);
+  Fpnt->setText(tr("%1,%2").arg(state.focus.x()).arg(state.focus.y()));
   focusBox->setIcon(QIcon(blob));
   focusCheck->setCheckState(state.fViz);
   seqCheck->setCheckState(state.sViz);
 
-     blob.fill(state.lColor);
+  blob.fill(state.lColor);
   locatorBox->setIcon(QIcon(blob));
   locatorCheck->setCheckState(state.lViz);
   locatorQuad->buttons().at(state.lQuad)->setChecked(true);
@@ -982,6 +1142,8 @@ void DotWindow::pushState()
 
 void DotWindow::kmerChange()
 { state.kmer = kmerSpin->value();
+  free_dots(plot.dots);
+  plot.dots = build_dots(plot.Alen,plot.Aseq,plot.Blen,plot.Bseq,state.kmer);
   update();
 }
 
@@ -1009,7 +1171,28 @@ void DotWindow::frameToView(double newZ)
 }
 
 void DotWindow::clickToFocus()
-{ Fpnt->setText(tr("%1,%2").arg(state.focus.x()).arg(state.focus.y())); }
+{ Fpnt->setText(tr("%1,%2").arg(state.focus.x()).arg(state.focus.y()));
+  seqRealign();
+}
+
+void DotWindow::seqMove(int dir, int id)
+{ if (id <= 2)
+    { state.focus.setX(state.focus.x()-dir);
+      if (state.focus.x() < 0)
+        state.focus.setX(0);
+      else if (state.focus.x() > plot.Alen)
+        state.focus.setX(plot.Alen);
+    }
+  else
+    { state.focus.setY(state.focus.y()-dir);
+      if (state.focus.y() < 0)
+        state.focus.setY(0);
+      else if (state.focus.y() > plot.Blen)
+        state.focus.setY(plot.Blen);
+    }
+  clickToFocus();
+  update();
+}
 
 void DotWindow::zoomDown()
 { if (canvas->zoomView(0.70710678118))
@@ -1068,7 +1251,6 @@ error:
 bool DotWindow::checkRangeA()
 { int ab, ae;
 
-printf("Check A\n"); fflush(stdout);
   if (checkPair(Arng,ab,ae,'-'))
     return (true);
   if (ab >= ae)
@@ -1136,7 +1318,51 @@ void DotWindow::focusChange()
 { if (checkFocus())
     return;
   state.focus = Fval;
+  seqRealign();
   update();
+}
+
+void DotWindow::seqRealign()
+{ int c = state.focus.x();
+  int v;
+
+  v = plot.Aseq[c];
+  plot.Aseq[c] = 0;
+  if (c >= 500)
+    seqUL->setText(tr("%1").arg(plot.Aseq+(c-500)));
+  else
+    seqUL->setText(tr("%1").arg(plot.Aseq));
+  plot.Aseq[c] = v;
+
+  if (c+500 > plot.Alen)
+    { v = plot.Aseq[c+500];
+      plot.Aseq[c+500] = 0;
+      seqUR->setText(tr("%1").arg(plot.Aseq+c));
+      plot.Aseq[c+500] = v;
+    }
+  else
+    seqUR->setText(tr("%1").arg(plot.Aseq+c));
+  seqUR->setCursorPosition(0);
+
+  c = state.focus.y();
+
+  v = plot.Bseq[c];
+  plot.Bseq[c] = 0;
+  if (c >= 500)
+    seqLL->setText(tr("%1").arg(plot.Bseq+(c-500)));
+  else
+    seqLL->setText(tr("%1").arg(plot.Bseq));
+  plot.Bseq[c] = v;
+
+  if (c+500 > plot.Blen)
+    { v = plot.Bseq[c+500];
+      plot.Bseq[c+500] = 0;
+      seqLR->setText(tr("%1").arg(plot.Bseq+c));
+      plot.Bseq[c+500] = v;
+    }
+  else
+    seqLR->setText(tr("%1").arg(plot.Bseq+c));
+  seqLR->setCursorPosition(0);
 }
 
 void DotWindow::focusColorChange()
@@ -1150,6 +1376,27 @@ void DotWindow::focusColorChange()
   update();
 }
 
+void DotWindow::focusOnChange()
+{ state.fOn = focusOn->checkState();
+
+  bool en = (state.fOn != Qt::Unchecked);
+
+  Fpnt->setEnabled(en);
+  focusBox->setEnabled(en);
+  focusCheck->setEnabled(en);
+  seqCheck->setEnabled(en);
+
+  en = en && (state.sViz != Qt::Unchecked);
+
+  seqUL->setEnabled(en);
+  seqUR->setEnabled(en);
+  seqLL->setEnabled(en);
+  seqLR->setEnabled(en);
+
+  seqRealign();
+  update();
+}
+
 void DotWindow::hairsChange()
 { state.fViz = focusCheck->checkState();
   update();
@@ -1157,6 +1404,14 @@ void DotWindow::hairsChange()
 
 void DotWindow::seqChange()
 { state.sViz = seqCheck->checkState();
+
+  bool en = (state.sViz != Qt::Unchecked);
+
+  seqUL->setEnabled(en);
+  seqUR->setEnabled(en);
+  seqLL->setEnabled(en);
+  seqLR->setEnabled(en);
+
   update();
 }
 
@@ -1177,28 +1432,32 @@ void DotWindow::locatorColorChange()
   update();
 }
 
-void DotWindow::updateWindowMenu()
-{ if (isMaximized())
-    { fullScreenAct->setToolTip(tr("Return window to previous size"));
-      fullScreenAct->setText(tr("Previous size"));
-    }
-  else
-    { fullScreenAct->setToolTip(tr("Expand window to full screen"));
-      fullScreenAct->setText(tr("Full screen"));
-    }
-}
-
 void DotWindow::fullScreen()
 { if (isMaximized())
-    showNormal();
+    { fullScreenAct->setToolTip(tr("Expand window to full screen"));
+      fullScreenAct->setText(tr("Full screen"));
+      showNormal();
+    }
   else
-    showMaximized();
+    { fullScreenAct->setToolTip(tr("Return window to previous size"));
+      fullScreenAct->setText(tr("Previous size"));
+      showMaximized();
+    }
 }
 
 void DotWindow::closeEvent(QCloseEvent *event)
-{ state.wGeom = geometry();
+{ QList<DotWindow *> plots = MainWindow::plots;
+  int i;
+
+  state.wGeom = geometry();
   lastState = state;
   firstTime = false;
+
+  for (i = 0; i < plots.length(); i++)
+    if (plots[i] == this)
+      { plots.removeAt(i);
+        break;
+      }
   event->accept();
 }
 

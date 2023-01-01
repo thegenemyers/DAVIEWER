@@ -5,122 +5,159 @@
 #include "DB.h"
 #include "doter.h"
 
-#undef DEBUG
+#undef  DEBUG
+#undef  DEBUG_FILL
 
 typedef struct
-  { uint32 code;
+  { uint64 code;
     int    pos;
   } Tuple;
 
-static uint32 Kmask;
+static int _units[] = { 1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000, 50000,
+                       100000, 200000, 500000, 1000000, 2000000, 5000000, 10000000, 20000000,
+                       50000000, 100000000, 200000000, 500000000, 1000000000 };
 
-static uint32 Cumber[4];
+static char *_suffix[] = { "", "", "", "", "", "", "", "", "", "K", "K", "K", "K", "K", "K",
+                           "K", "K", "K", "M", "M", "M", "M", "M", "M", "M", "M", "M", "G" };
 
-static Tuple *build_vector(int len, char *seq, int kmer)
+static int _divot[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1000, 1000, 1000, 1000, 1000, 1000, 1000, 1000,
+                       1000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000, 1000000,
+                       1000000, 1000000000 };
+
+int   *units  = _units;
+char **suffix = _suffix;
+int   *divot  = _divot;
+
+int divide_bar(int t)
+{ int u;
+
+  for (u = 1; u < 28; u++)
+    { if (units[u] > t)
+        break;
+    }
+  u -= 1;
+  return (u);
+}
+
+static uint64 Kmask;
+
+static double LowLft[256];
+static double LowRgt[256];
+static double HghLft[256];
+static double HghRgt[256];
+
+static uint64 Cumber[4];
+
+static int Tran[128] =
+  { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+
+static Tuple *build_vector(int len, char *seq, int kmer, Tuple *list)
 { int    p, km1;
-  uint32 u, c, x;
-  Tuple *list;
+  uint64 u, c, x;
 
   km1  = kmer-1;
-  list = (Tuple *) Malloc(sizeof(Tuple)*len,"Tuple list");
 
   c = u = 0;
   for (p = 0; p < km1; p++)
-    { x = seq[p];
+    { x = Tran[(int) seq[p]];
       c = (c << 2) | x;
       u = (u >> 2) | Cumber[x];
     }
   seq += km1;
-  len -= km1;
   for (p = 0; p < len; p++)
-    { x = seq[p];
+    { x = Tran[(int) seq[p]];
       c = ((c << 2) | x) & Kmask;
       u = (u >> 2) | Cumber[x];
       if (u < c)
-        { list[p].code = u;
-          list[p].pos  = p;
-        }
+        list[p].code = u;
       else
-        { list[p].code = c;
-          list[p].pos  = p;
-        }
+        list[p].code = c;
+      list[p].pos = p;
     }
   return (list);
 }
 
-static void merge(int alen, Tuple *alist, int *blen, Tuple *blist)
-{ int    *bplot;
+static void merge(int blen, Tuple *blist, int *alen, Tuple *alist)
+{ int    *aplot;
   int     i, j;
   int     al, bl;
   int     al2, bl2;
   int     y;
-  uint32  ka, lc, bnull;
+  uint64  kb, lc, anull;
 
-  al = alen;
-  bl = *blen;
+  bl = blen;
+  al = *alen;
 
-  lc = blist[bl-1].code;
-  for (al2 = al-1; al2 >= 0; al2--)
-    if (alist[al2].code < lc)
-      break;
-  al2 += 1;
-  for (bl2 = bl-2; bl2 >= 0; bl2--)
+  lc = alist[al-1].code;
+  for (bl2 = bl-1; bl2 >= 0; bl2--)
     if (blist[bl2].code < lc)
       break;
   bl2 += 1;
+  for (al2 = al-2; al2 >= 0; al2--)
+    if (alist[al2].code < lc)
+      break;
+  al2 += 1;
 
-  bplot = (int *) blist;
-  bnull = bl;
+  aplot = (int *) alist;
+  anull = 2*al;
 
   y = 0;
   i = j = 0;
-  while (i < al2)
-    { ka = alist[i].code;
-      while (blist[j].code < ka)
+  while (i < bl2)
+    { kb = blist[i].code;
+      while (alist[j].code < kb)
         j += 1;
 
-      if (blist[j].code == ka)
-        { alist[i++].code = y;
-          while (alist[i].code == ka)
-            alist[i++].code = y;
-          bplot[y++] = blist[j++].pos;
-          while (blist[j].code == ka)
-            bplot[y++] = blist[j++].pos;
-          bplot[y++] = -1;
+      if (alist[j].code == kb)
+        { blist[i++].code = y;
+          while (blist[i].code == kb)
+            blist[i++].code = y;
+          aplot[y++] = alist[j++].pos;
+          while (alist[j].code == kb)
+            aplot[y++] = alist[j++].pos;
+          aplot[y++] = -1;
         }
       else
-        { alist[i++].code = bnull;
-          while (alist[i].code == ka)
-            alist[i++].code = bnull;
+        { blist[i++].code = anull;
+          while (blist[i].code == kb)
+            blist[i++].code = anull;
         }
     }
 
-  if (al2 < al && alist[i].code == lc)
-    { alist[i++].code = y;
-      while (i < al && alist[i].code == lc)
-        alist[i++].code = y;
-      while (bl2 < bl)
-        bplot[y++] = blist[bl2++].pos;
-      bplot[y++] = -1;
+  if (bl2 < bl && blist[i].code == lc)
+    { blist[i++].code = y;
+      while (i < bl && blist[i].code == lc)
+        blist[i++].code = y;
+      while (al2 < al)
+        aplot[y++] = alist[al2++].pos;
+      aplot[y++] = -1;
     }
-  while (i < al)
-    alist[i++].code = bnull;
+  while (i < bl)
+    blist[i++].code = anull;
 
-  *blen = y;
+  *alen = y;
 }
 
-static void compress(int alen, Tuple *alist, int bnull)
-{ int    *aplot;
+static void compress(int blen, Tuple *blist, int arun, int *aplot)
+{ int    *bplot;
   int     i, x;
 
-  aplot = (int *) alist;
+  bplot = ((int *) aplot) + arun;
 
-  for (i = 0; i < alen; i++)
-    { x = alist[i].code;
-      if (x >= bnull)
-        aplot[i] = bnull; 
+  arun -= 1;
+  for (i = 0; i < blen; i++)
+    { x = blist[i].code;
+      if (x >= arun)
+        bplot[i] = arun; 
       else
-        aplot[i] = alist[i].code;
+        bplot[i] = blist[i].code;
     }
 }
 
@@ -137,78 +174,111 @@ static int PSORT(const void *l, const void *r)
 }
 
 DotList *build_dots(int alen, char *aseq, int blen, char *bseq, int kmer)
-{ DotList *dots;
-  int      km1, brun;
+{ static int first = 1;
+
+  DotList *dots;
+  int      km1, arun;
   Tuple   *lista, *listb;
 
   km1 = kmer-1;
 
-  if (kmer == 16)
-    Kmask = 0xffffffff;
+  if (kmer == 32)
+    Kmask = 0xffffffffffffffffllu;
   else
-    Kmask = (0x1 << 2*kmer) - 1;
+    Kmask = (0x1llu << 2*kmer) - 1;
 
-  Cumber[0] = (0x3 << 2*km1);
-  Cumber[1] = (0x2 << 2*km1);
-  Cumber[2] = (0x1 << 2*km1);
-  Cumber[3] = 0;
+  Cumber[0] = (0x3llu << 2*km1);
+  Cumber[1] = (0x2llu << 2*km1);
+  Cumber[2] = (0x1llu << 2*km1);
+  Cumber[3] = 0x0llu;
+
+  if (first)
+    { int s, r, x;
+
+      first = 0;
+
+      for (r = 0; r < 16; r++)
+        for (s = 0; s < 16; s++)
+          { x = (r << 4) | s;
+            HghRgt[x] = (r*s);
+            HghLft[x] = (r*(16-s));
+            LowRgt[x] = ((16-r)*s);
+            LowLft[x] = ((16-r)*(16-s));
+            if (r == 0)
+              { if (s == 0)
+                  HghRgt[x] = HghLft[x] = LowRgt[x] = 1;
+                else
+                  HghRgt[x] = HghLft[x] = 1;
+              }
+            else
+              { if (s == 0)
+                  HghRgt[x] = LowRgt[x] = 1;
+              }
+          }
+      LowLft[0] = 255;
+    }
 
   dots = (DotList *) Malloc(sizeof(DotList),"Allocating dot data structure");
 
-  lista = build_vector(alen,aseq,kmer);
-  listb = build_vector(blen,bseq,kmer);
+  alen -= km1;
+  blen -= km1;
 
-  qsort(lista,alen-km1,sizeof(Tuple),TSORT);
-  qsort(listb,blen-km1,sizeof(Tuple),TSORT);
+  lista = (Tuple *) Malloc(sizeof(Tuple)*(alen+blen),"Tuple list");
+  listb = lista + alen;
+
+  build_vector(alen,aseq,kmer,lista);
+  build_vector(blen,bseq,kmer,listb);
+
+  qsort(lista,alen,sizeof(Tuple),TSORT);
+  qsort(listb,blen,sizeof(Tuple),TSORT);
 
 #ifdef DEBUG
   { int i;
 
-    for (i = 1; i < alen-km1; i++)
+    for (i = 1; i < alen; i++)
       if (lista[i].code < lista[i-1].code)
         printf("Not sorted\n");
 
-    for (i = 1; i < blen-km1; i++)
+    for (i = 1; i < blen; i++)
       if (listb[i].code < listb[i-1].code)
         printf("Not sorted\n");
   }
 #endif
 
-  alen -= km1;
-  blen -= km1;
-  brun  = blen;
-  merge(alen,lista,&brun,listb);
+  arun = alen;
+  merge(blen,listb,&arun,lista);
 
-  dots->bplot = Realloc(listb,sizeof(int)*brun,"Adjusting hit list\n");
-  dots->alen  = alen;
-  dots->brun  = brun;
+  dots->aplot = (int *) lista;
+  dots->blen  = blen;
+  dots->arun  = arun;
 
-  qsort(lista,alen,sizeof(Tuple),PSORT);
+  qsort(listb,blen,sizeof(Tuple),PSORT);
 
 #ifdef DEBUG
   { int i;
 
-    printf("brun = %d\n",brun);
-    for (i = 0; i < alen; i++)
-      if (lista[i].pos != i)
-        printf("  Unassigned pos %d vs %d\n",i,lista[i].pos);
+    printf("arun = %d\n",arun);
+    for (i = 0; i < blen; i++)
+      if (listb[i].pos != i)
+        printf("  Unassigned pos %d vs %d\n",i,listb[i].pos);
     printf("All good\n"); fflush(stdout);
   }
 #endif
 
-  compress(alen,lista,brun-1);
+  compress(blen,listb,arun,dots->aplot);
 
-  dots->aplot = Realloc(lista,sizeof(int)*alen,"Adjusting hit list\n");
+  dots->aplot = Realloc(dots->aplot,sizeof(int)*(blen+arun),"Adjusting hit list\n");
+  dots->bplot = dots->aplot + arun;
 
 #ifdef DEBUG
   { int i, j;
 
     printf("Scan Lines:\n");
-    for (i = 0; i < alen; i++)
+    for (i = 0; i < blen; i++)
       { printf(" %5d:",i);
-        j = dots->aplot[i];
-        while (dots->bplot[j] >= 0)
-          { printf(" %5d",dots->bplot[j]);
+        j = dots->bplot[i];
+        while (dots->aplot[j] >= 0)
+          { printf(" %5d",dots->aplot[j]);
             j += 1;
           }
         printf("\n");
@@ -216,37 +286,39 @@ DotList *build_dots(int alen, char *aseq, int blen, char *bseq, int kmer)
   }
 #endif
 
+#ifdef DEBUG
   { int i, j;
     int nz, nel;
 
     printf("Scan Stats:\n");
     nz = nel = 0;
-    for (i = 0; i < alen; i++)
-      { j = dots->aplot[i];
-        if (dots->bplot[j] >= 0)
+    for (i = 0; i < blen; i++)
+      { j = dots->bplot[i];
+        if (dots->aplot[j] >= 0)
           { nz += 1;
-            while (dots->bplot[j] >= 0)
+            while (dots->aplot[j] >= 0)
               { nel += 1;
                 j += 1;
               }
           }
       }
-    printf("  Non-Zero lines: %d (out of %d)\n",nz,alen);
-    printf("  Av/line = %.1f (out of %d)\n",(1.*nel)/blen,blen);
-    printf("  Density = %.3f%%\n",((100.*nel)/blen)/alen);
+
+    printf("  Non-Zero lines: %d (out of %d)\n",nz,blen);
+    printf("  Av/line = %.1f (out of %d)\n",(1.*nel)/alen,alen);
+    printf("  Density = %.3f%%\n",((100.*nel)/alen)/blen);
   }
+#endif
 
   return (dots);
 }
 
 void free_dots(DotList *dots)
 { free(dots->aplot);
-  free(dots->bplot);
   free(dots);
 }
 
-double scale_plot(DotList *dots, Frame *frame, int rectW, int rectH)
-{ int  alen  = dots->alen;
+void render_plot(DotList *dots, Frame *frame, int rectW, int rectH, uchar **raster)
+{ int  blen  = dots->blen;
   int *aplot = dots->aplot;
   int *bplot = dots->bplot;
 
@@ -255,100 +327,110 @@ double scale_plot(DotList *dots, Frame *frame, int rectW, int rectH)
   double vW = frame->w;
   double vH = frame->h;
 
-  double xa = rectW/vW;
-  double xb = -vX*(rectW/vW);
+  double xa = (rectH-44.)/vH;
+  double xb = -vY*xa + 22.;
 
-  double ya = rectH/vH;
-  double yb = -vY*(rectH/vH);
+  double ya = (rectW-44.)/vW;
+  double yb = -vX*ya + 22.;
 
-  double maxim;
-  double MATRIX0[rectH], MATRIX1[rectH];
-  int    PUSH0[rectH], PUSH1[rectH];
+  double recth = rectH - 20.;
+  double rectw = rectW - 20.;
 
-  double *matrix0, *matrix1;
+  // printf("Paint = (%g,%g) %g x %g into %d x %d\n",vX,vY,vW,vH,rectW,rectH);
+
+  int    _MATRIX0[rectW+2], _MATRIX1[rectW+2];
+  int    *MATRIX0 = _MATRIX0+1, *MATRIX1 = _MATRIX1+1;
+  int    PUSH0[rectW], PUSH1[rectW];
+
+  uchar  *ras;
+  int    *matrix0, *matrix1;
   int    *push0, *push1;
   int     top0, top1;
 
-  int    r0, r1;
-  int    s0, s1;
-  double r, s, x;
-  double rl, sl;
-  double rh, sh;
-  int    i, ib, ie, p, y;
+  int    u;
+  int    s, s0, s1;
+  int    ir, is;
+  double r, nr;
+  int    i, ib, ie, p, y, x;
 
-  maxim = 0.;
-  for (i = 0; i < rectH; i++)
+  for (i = -1; i <= rectW; i++)
     MATRIX0[i] = MATRIX1[i] = 0;
   matrix0 = MATRIX0;
   matrix1 = MATRIX1;
   push0   = PUSH0;
   push1   = PUSH1;
   top0 = top1 = 0;
-  
-  ib = trunc(-(xb+1.)/xa) + 1;
-  ie = ceil((rectW-(xb+1.))/xa);
-  if (ib < 0) ib = 0;
-  if (ie > alen) ie = alen;
-  r = xa*ib+xb;
-// printf("lines %d - %d: %.3f pixels (%.3f) / line\n",ib,ie,xa,ya);
+
+  ib = ceil((20.-xb)/xa);
+  if (ib < 0)
+    ib = 0;
+  ie = floor((recth-xb)/xa);
+  if (ie > blen)
+    ie = blen;
+  u = (int) (xa*ib + xb);
+
+  xa *= 16.;
+  xb *= 16.;
+  ya *= 16.;
+  yb *= 16.;
+  rectw *= 16;
+  recth *= 16;
+
+  r  = xa*ib+xb;
+  nr = ((((int) floor(r)) >> 4) + 1) * 16.;
+#ifdef DEBUG_FILL
+  printf("lines %d - %d: %.3f/%.3f pixels/coord line\n",ib,ie,xa,ya);
+#endif
   for (i = ib; i < ie; i++)
-    { p = aplot[i];
-// printf("i,r = %d,%.3f\n",i,r);
-      if ((y = bplot[p]) >= 0)
-        { r0 = trunc(r);
-          r1 = r0+1;
-          rl = r1-r;
-          rh = 1.-rl; 
+    { p = bplot[i];
+#ifdef DEBUG_FILL
+      printf("  Line i,r,ir = %d,%.3f,%1x\n",i,r/16.,((int) floor(r) & 0xf));
+#endif
+      if ((y = aplot[p]) >= 0)
+        { ir = (((int) floor(r)) & 0xf) << 4;
           while (y >= 0)
-            { s = ya*y+yb; 
-// printf("  j,s = %d,%.3f",y,s);
-              s0 = trunc(s);
-              s1 = s0+1;
-              sl = (s1-s);
-              sh = 1.-sl;
-// printf("       %d-%d vs %d-%d: %.3f-%.3f %.3f-%.3f\n",r0,r1,s0,s1,rl,rh,sl,sh); fflush(stdout);
+            { s = ((int) floor(ya*y+yb));
+              if (s >= 320 && s < rectw)
+                { is = ir | (s & 0xf);
+                  s0 = (s >> 4);
+                  s1 = s0+1;
+#ifdef DEBUG_FILL
+                  printf("     s,s0,is = %.3f,%d,%1x\n",(ya*y+yb)/16.,s0,(s & 0xf));
+#endif
 
 #define MATRIX(m,s,p,t,v)       \
   x = m[s];                     \
-  if (x == 0.)                  \
+  if (x == 0)                   \
     p[t++] = s;                 \
-  m[s] = x+v;
-                
-              if (s0 >= 0)
-                { if (s1 < rectH)
-                    { MATRIX(matrix0,s1,push1,top1,rl*sl);
-                      MATRIX(matrix1,s1,push0,top0,rh*sl);
-                      MATRIX(matrix0,s0,push1,top1,rl*sh);
-                      MATRIX(matrix1,s0,push0,top0,rh*sh);
-                    }
-                  else if (s0 < rectH)
-                    { MATRIX(matrix0,s0,push1,top1,rl*sh);
-                      MATRIX(matrix1,s0,push0,top0,rh*sh);
-                    }
-                }
-              else if (s1 >= 0 && s1 < rectH)
-                { MATRIX(matrix0,s1,push1,top1,rl*sl);
-                  MATRIX(matrix1,s1,push0,top0,rh*sl);
+  if (v > x)			\
+    m[s] = v;
+
+                  MATRIX(matrix0,s1,push0,top0,LowRgt[is]);
+                  MATRIX(matrix1,s1,push1,top1,HghRgt[is]);
+                  MATRIX(matrix0,s0,push0,top0,LowLft[is]);
+                  MATRIX(matrix1,s0,push1,top1,HghLft[is]);
                 }
               
-              y = bplot[++p];
+              y = aplot[++p];
             }
         }
-      if (r + xa > ceil(r))
-        { r0 = trunc(r);
-          if (r0 >= 0 && r0 < rectW)
-            while (top0 > 0)
-              { s0 = push0[--top0];
-                if (matrix0[s0] > maxim)
-                  maxim = matrix0[s0];
-                matrix0[s0] = 0.;
-              }
-          else
-            while (top0 > 0)
-              { s0 = push0[--top0];
-                matrix0[s0] = 0.;
-              }
-// printf("FLIPPING %g\n",maxim);
+      r += xa;
+      if (r > nr)
+        { ras = raster[u++];
+#ifdef DEBUG_FILL
+          printf("OUT %d: ",u-1); fflush(stdout);
+#endif
+          while (top0 > 0)
+            { s0 = push0[--top0];
+#ifdef DEBUG_FILL
+              printf(" %d(%d)",s0,matrix0[s0]); fflush(stdout);
+#endif
+              ras[s0] = (uchar) matrix0[s0];
+              matrix0[s0] = 0.;
+            }
+#ifdef DEBUG_FILL
+          printf("\n"); fflush(stdout);
+#endif
           matrix0 = matrix1;
           push0   = push1;
           top0    = top1;
@@ -361,18 +443,14 @@ double scale_plot(DotList *dots, Frame *frame, int rectW, int rectH)
               push1   = PUSH0;
             }
           top1 = 0;
+          nr += 16.;
         }
-      r += xa;
     }
-  r1 = trunc(r-xa)+1;
-  if (r1 >= 0 && r1 < rectW)
-    while (top1 > 0)
-      { s1 = push1[--top1];
-        if (matrix1[s1] > maxim)
-          maxim = matrix1[s1];
-      }
-
-printf("max = %g\n",maxim);
-
-  return (maxim);
+  if (r < rectH+16.)
+    { ras = raster[u++];
+      while (top1 > 0)
+        { s1 = push1[--top1];
+          ras[s1] = (uchar) matrix1[s1];
+        }
+    }
 }

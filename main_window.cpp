@@ -337,7 +337,7 @@ void MyCanvas::setModel(DataModel *m)
 
 void MyCanvas::assignColor()
 { DAZZ_READ *read = model->db2->reads;
-  int        cidx = read[haloed].flags & DB_QV;
+  int        cidx = read[popSel].flags & DB_QV;
   int        i;
   static QColor newColor = QColor(255,125,255);
 
@@ -353,14 +353,14 @@ void MyCanvas::assignColor()
       if ( ! newColor.isValid())
         return;
       avail[i] = false;
-      read[haloed].flags |= i;
+      read[popSel].flags |= i;
       colors[i] = newColor;
       update();
     }
   else
-    { i = (read[haloed].flags & DB_QV);
+    { i = (read[popSel].flags & DB_QV);
       avail[i] = true;
-      read[haloed].flags &= (DB_BEST | DB_CCS);
+      read[popSel].flags &= (DB_BEST | DB_CCS);
       update();
     }
 }
@@ -400,7 +400,7 @@ void MyCanvas::showPile()
   Palette_State *ps = &MainWindow::palette;
 
   pile = openClone( os->lasInfo->absoluteFilePath().toLatin1().data(),
-                    haloed,!ps->bridges,!ps->overlaps,ps->drawElim,
+                    popSel,!ps->bridges,!ps->overlaps,ps->drawElim,
                     ps->compressMax,ps->stretchMax,&v);
 
   if (pile == NULL)
@@ -411,7 +411,7 @@ void MyCanvas::showPile()
   main = new MainWindow(NULL);
 
   main->setModel(pile);
-  main->setWindowTitle(tr("Pile - %1").arg(haloed));
+  main->setWindowTitle(tr("Pile - %1").arg(popSel+1));
   main->update();
 
   main->raise();
@@ -434,16 +434,37 @@ void MyCanvas::showDot()
   char      *aseq, *bseq;
 
   alen = model->db1->reads[haloA].rlen;
-  blen = model->db2->reads[haloed].rlen;
+  blen = model->db2->reads[popSel].rlen;
   aseq = New_Read_Buffer(model->db1);
   bseq = New_Read_Buffer(model->db2);
-  Load_Read(model->db1,haloA,aseq,0);
-  Load_Read(model->db2,haloed,bseq,0);
+  Load_Read(model->db1,haloA,aseq,1);
+  Load_Read(model->db2,popSel,bseq,1);
 
-  image = new DotWindow(tr("Read %1 vs Read %2").arg(haloA+1).arg(haloed+1),alen,aseq,blen,bseq);  
+  image = new DotWindow(tr("Read %1 vs Read %2").arg(haloA+1).arg(popSel+1),alen,aseq,blen,bseq);  
 
   image->raise();
   image->show();
+
+  MainWindow::plots += image;
+}
+
+void MyCanvas::showSelfDot()
+{ DotWindow *image;
+  int        alen, blen;
+  char      *aseq, *bseq;
+
+  alen = blen = model->db1->reads[haloA].rlen;
+  aseq = New_Read_Buffer(model->db1);
+  bseq = New_Read_Buffer(model->db1);
+  Load_Read(model->db1,haloA,aseq,1);
+  Load_Read(model->db1,haloA,bseq,1);
+
+  image = new DotWindow(tr("Read %1 vs Itself").arg(haloA+1),alen,aseq,blen,bseq);  
+
+  image->raise();
+  image->show();
+
+  MainWindow::plots += image;
 }
 
 MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
@@ -460,6 +481,10 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
   dotAct = new QAction(tr("View Dot Plot"),this);
     dotAct->setToolTip(tr("Create a dot plot between this read and A-read"));
     dotAct->setFont(QFont(tr("Monaco"),11));
+
+  selfDotAct = new QAction(tr("View Dot Plot"),this);
+    selfDotAct->setToolTip(tr("Create a dot plot of A-read against itself"));
+    selfDotAct->setFont(QFont(tr("Monaco"),11));
 
   aline = new QAction(tr(""),this);
     aline->setFont(QFont(tr("Monaco"),11));
@@ -482,6 +507,7 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
 
   annup = new MyMenu(this);
     annup->addAction(mline);
+    annup->addAction(selfDotAct);
 
   haloed = -1;
   for (i = 1; i <= DB_QV; i++)
@@ -500,6 +526,7 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
   connect(colorAct, SIGNAL(triggered()), this, SLOT(assignColor()));
   connect(viewAct, SIGNAL(triggered()), this, SLOT(showPile()));
   connect(dotAct, SIGNAL(triggered()), this, SLOT(showDot()));
+  connect(selfDotAct, SIGNAL(triggered()), this, SLOT(showSelfDot()));
 
   connect(popup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
   connect(annup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
@@ -632,6 +659,7 @@ void MyCanvas::mousePressEvent(QMouseEvent *event)
             bread >>= 1;
             blen    = db2->reads[bread].rlen;
 
+            popSel = bread;
             av = aread+1;
             bv = bread+1;
             w  = digits(av,bv);
@@ -735,6 +763,7 @@ void MyCanvas::mousePressEvent(QMouseEvent *event)
             if (bread == -1)
              { int alen;
 
+               haloA = aread;
                alen = model->db1->reads[aread].rlen;
                astr.append(tr("%1[0..%2]").arg(aread+1).arg(alen));
              }
@@ -4745,6 +4774,7 @@ void OpenDialog::writeSettings(QSettings &settings)
 \*****************************************************************************/
 
 QList<MainWindow *> MainWindow::frames;
+QList<DotWindow  *> MainWindow::plots;
 Palette_State       MainWindow::palette;
 Open_State          MainWindow::dataset;
 int                 MainWindow::numLive;
@@ -5138,6 +5168,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
       for (i = frames.length()-1; i >= 0; i--)
         if (frames[i] != this)
           frames[i]->close();
+      for (i = plots.length()-1; i >= 0; i--)
+        plots[i]->close();
       event->accept();
       return;
     }
@@ -5147,6 +5179,7 @@ void MainWindow::closeEvent(QCloseEvent *event)
       { frames.removeAt(i);
         break;
       }
+
   event->accept();
 }
 
@@ -5155,6 +5188,9 @@ void MainWindow::closeAll()
 
   for (i = frames.length()-1; i >= 0; i--)
     frames[i]->close();
+
+  for (i = plots.length()-1; i >= 0; i--)
+    plots[i]->close();
 }
 
 void MainWindow::fullScreen()
