@@ -5,11 +5,13 @@
 #include <QtWidgets>
 
 extern "C" {
+#include "libfastk.h"
 #include "piler.h"
 #include "DB.h"
 }
 
 class DotWindow;
+class ProfWindow;
 
 #define SIZE_TICKS 100
 #define MAX_TRACKS 100
@@ -80,6 +82,7 @@ private slots:
   void showPile();
   void showDot();
   void showSelfDot();
+  void showProfile();
   void hidingMenu();
 
 private:
@@ -89,13 +92,16 @@ private:
 
   MyMenu  *popup;
   MyMenu  *annup;
+  MyMenu  *trkup;
   QAction *aline;
   QAction *bline;
   QAction *viewAct;
   QAction *dotAct;
   QAction *selfDotAct;
+  QAction *profileAct;
   QAction *colorAct;
   QAction *mline;
+  QAction *tline;
 
   bool   doHalo;
   int    haloed, haloA;
@@ -204,14 +210,6 @@ typedef struct
     int    qualBad;
     bool   qualonB;
 
-    bool   profVis;
-    bool   profqv;
-    int    profMode;
-    QColor profColor[5];
-    QColor profHue[3];
-    int    profLow;
-    int    profHgh;
-
     int       nmasks;
     bool        showTrack[MAX_TRACKS];
     QColor      trackColor[MAX_TRACKS];
@@ -277,8 +275,6 @@ private slots:
   void matchTriChange();
   void qualRampChange();
   void qualTriChange();
-  void profRampChange();
-  void profTriChange();
   void trackChange();
 
   void stretchCheck();
@@ -287,8 +283,6 @@ private slots:
   void matchBadCheck();
   void qualGoodCheck();
   void qualBadCheck();
-  void profLowCheck();
-  void profHghCheck();
 
   void activateGrid(int);
   void activateHalo(int);
@@ -300,7 +294,6 @@ private slots:
 
   void activateMatchQV(int);
   void activateQualQV(int);
-  void activateRepProfile(int);
   void enforceMatchOff(int);
   void activateTracks(int);
 
@@ -390,25 +383,6 @@ private:
     int             qualGood;
     int             qualBad;
     QCheckBox      *qualonB;
-
-  QWidget *profPanel;
-  bool     profVis;
-  QCheckBox      *profCheck;
-    QLabel         *profLabel;
-    QLabel         *profLabelScale;
-    QRadioButton   *profRadioScale;
-    QLabel         *profLabelTri;
-    QRadioButton   *profRadioTri;
-    QStackedLayout *profStack;
-    QToolButton    *profBox[5];
-    QColor          profColor[5];
-    QToolButton    *profLev[3];
-    QColor          profHue[3];
-    QLabel         *profLevLabel[3];
-    QLineEdit      *profBot;
-    QLineEdit      *profTop;
-    int             profLow;
-    int             profHgh;
 
   TrackWidget *maskPanel;
   int          nmasks;
@@ -526,6 +500,7 @@ public:
 
   static QList<MainWindow *> frames;
   static QList<DotWindow *>  plots;
+  static QList<ProfWindow *> profs;
   static Palette_State       palette;
   static Open_State          dataset;
   static int                 numLive;

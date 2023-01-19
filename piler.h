@@ -2,6 +2,7 @@
 #define PILER
 
 #include "DB.h"
+#include "libfastk.h"
 
 #define PANEL_TARGET  50000   //  Desired panel size for big A-reads
 #define PANEL_FUDGE    5000   //  Last panel can be PANEL_SIZE + PANEL_FUDGE in size
@@ -64,7 +65,7 @@ typedef struct
     int      tbytes; // Trace unit isze
 
     DAZZ_TRACK *qvs; // Quality track (if != NULL)
-    DAZZ_TRACK *prf; // Repeat Profile track (if != NULL)
+    Profile_Index *prof;  //  FastK profile of each read
 
     int      *panels; // plist[panel[i],panel[i+1]) is the list of LAs covering a
     int      *plists; //   part of panel i.

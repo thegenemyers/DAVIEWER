@@ -4,14 +4,17 @@
 #include <QtGui>
 
 extern "C" {
-#include "piler.h"
+#include "DB.h"
 #include "align.h"
+#include "libfastk.h"
+#include "piler.h"
 }
 
 #define HIFI
 
 #include "main_window.h"
 #include "dot_window.h"
+#include "prof_window.h"
 
 #define DAVIEW_MIN_WIDTH   500   //  Minimum display window width & height
 #define DAVIEW_MIN_HEIGHT  350
@@ -333,6 +336,10 @@ void MyCanvas::setModel(DataModel *m)
     popup->addAction(viewAct);
   else
     popup->removeAction(viewAct);
+  if (m != NULL && m->prof != NULL)
+    annup->addAction(profileAct);
+  else
+    annup->removeAction(profileAct);
 }
 
 void MyCanvas::assignColor()
@@ -467,9 +474,30 @@ void MyCanvas::showSelfDot()
   MainWindow::plots += image;
 }
 
+void MyCanvas::showProfile()
+{ ProfWindow *image;
+  int         alen, plen;
+  char       *aseq;
+  uint16     *prof;
+
+  alen = model->db1->reads[haloA].rlen;
+  aseq = New_Read_Buffer(model->db1);
+  Load_Read(model->db1,haloA,aseq,1);
+
+  prof = (uint16 *) malloc(sizeof(uint16)*alen);
+  plen = Fetch_Profile(model->prof,haloA,alen,prof);
+
+  image = new ProfWindow(tr("Profile for Read %1").arg(haloA+1),alen,aseq,plen,prof);
+
+  image->raise();
+  image->show();
+
+  MainWindow::profs += image;
+}
+
 MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
 { int i;
- 
+
   colorAct = new QAction(tr("Color"),this);
     colorAct->setToolTip(tr("Assign a color to this read"));
     colorAct->setFont(QFont(tr("Monaco"),11));
@@ -485,6 +513,10 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
   selfDotAct = new QAction(tr("View Dot Plot"),this);
     selfDotAct->setToolTip(tr("Create a dot plot of A-read against itself"));
     selfDotAct->setFont(QFont(tr("Monaco"),11));
+
+  profileAct = new QAction(tr("View Profile"),this);
+    profileAct->setToolTip(tr("Show profile of the A-read"));
+    profileAct->setFont(QFont(tr("Monaco"),11));
 
   aline = new QAction(tr(""),this);
     aline->setFont(QFont(tr("Monaco"),11));
@@ -509,6 +541,13 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
     annup->addAction(mline);
     annup->addAction(selfDotAct);
 
+  tline = new QAction(tr(""),this);
+    tline->setFont(QFont(tr("Monaco"),11));
+    tline->setEnabled(false);
+
+  trkup = new MyMenu(this);
+    trkup->addAction(tline);
+
   haloed = -1;
   for (i = 1; i <= DB_QV; i++)
     avail[i] = true;
@@ -522,14 +561,17 @@ MyCanvas::MyCanvas(QWidget *parent) : QWidget(parent)
   pal.setBrush(QPalette::Disabled,QPalette::Text,QBrush(Qt::black));
   popup->setPalette(pal);
   annup->setPalette(pal);
+  trkup->setPalette(pal);
 
   connect(colorAct, SIGNAL(triggered()), this, SLOT(assignColor()));
   connect(viewAct, SIGNAL(triggered()), this, SLOT(showPile()));
   connect(dotAct, SIGNAL(triggered()), this, SLOT(showDot()));
   connect(selfDotAct, SIGNAL(triggered()), this, SLOT(showSelfDot()));
+  connect(profileAct, SIGNAL(triggered()), this, SLOT(showProfile()));
 
   connect(popup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
   connect(annup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
+  connect(trkup, SIGNAL(aboutToHide()), this, SLOT(hidingMenu()));
 }
 
 void MyCanvas::mouseMoveEvent(QMouseEvent *event)
@@ -586,6 +628,7 @@ void MyCanvas::mouseReleaseEvent(QMouseEvent *event)
   if ( ! menuLock)
     { popup->hide();
       annup->hide();
+      trkup->hide();
     }
 }
 
@@ -760,12 +803,15 @@ void MyCanvas::mousePressEvent(QMouseEvent *event)
         else
           { QString astr;
 
+            menuLock = ((event->modifiers() & Qt::SHIFT) != 0);
             if (bread == -1)
              { int alen;
 
                haloA = aread;
                alen = model->db1->reads[aread].rlen;
                astr.append(tr("%1[0..%2]").arg(aread+1).arg(alen));
+               mline->setText(astr);
+               annup->exec(event->globalPos());
              }
             else
               { Palette_State *palette = &(MainWindow::palette);
@@ -775,12 +821,9 @@ void MyCanvas::mousePressEvent(QMouseEvent *event)
                 data = (int *) palette->track[j]->data;
                 astr.append(tr("%1[%2..%3]").arg(palette->track[j]->name)
                                             .arg(data[bst]).arg(data[bst+1]));
+               tline->setText(astr);
+               trkup->exec(event->globalPos());
               }
-            mline->setText(astr);
-
-            menuLock = ((event->modifiers() & Qt::SHIFT) != 0);
-
-            annup->exec(event->globalPos());
           }
 
       else
@@ -931,7 +974,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
       int      fpanel, lpanel;
 
       bool        doGrid, doBridge, doOverlap;
-      bool        doRead, doPile, doProf, doElim;
+      bool        doRead, doPile, doElim;
       short       EMASK, EVALU;
       int         bAnno;
       DAZZ_TRACK *track[palette->nmasks];
@@ -1024,8 +1067,6 @@ void MyCanvas::paintEvent(QPaintEvent *event)
         doPile = ! (model->tspace*hbp >= MIN_FEATURE_SIZE && (palette->matchqv ||
                         (palette->qualVis && palette->qualqv && palette->qualonB && sym)));
         doRead = ! (model->tspace*hbp >= MIN_FEATURE_SIZE && palette->qualVis && palette->qualqv);
-        doProf = (model->tspace*hbp*5 >= MIN_FEATURE_SIZE && palette->profVis && palette->profqv
-                    && vbp >= 5.);
 
         bAnno = 0;
         if (MIN_HORZ_VIEW*hbp >= MIN_FEATURE_SIZE)
@@ -1110,38 +1151,6 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                 { qPen[j].setWidth(2);
                   qPen[j].setCapStyle(Qt::FlatCap);
                   qPen[j].setColor(palette->qualHue[j]);
-                }
-          }
-
-        if (doProf)
-          { int j;
-
-            if (palette->profMode == 0)
-              { for (j = 0; j < 5; j++)
-                  { if (vbp >= 10.)
-                      pPen[j].setWidth(2+2*j);
-                    else
-                      pPen[j].setWidth(2);
-                    pPen[j].setCapStyle(Qt::FlatCap);
-                    pPen[j].setColor(palette->profColor[j]);
-                  }
-                for (j = 5; j < 10; j++)
-                  { if (vbp >= 10.)
-                      pPen[j].setWidth(10);
-                    else
-                      pPen[j].setWidth(2);
-                    pPen[j].setCapStyle(Qt::FlatCap);
-                    pPen[j].setColor(palette->profColor[4]);
-                  }
-              }
-            else
-              for (j = 0; j < 3; j++)
-                { if (vbp >= 10.)
-                    pPen[j].setWidth(2);
-                  else
-                    pPen[j].setWidth(2+2*j);
-                  pPen[j].setCapStyle(Qt::FlatCap);
-                  pPen[j].setColor(palette->profHue[j]);
                 }
           }
 
@@ -1549,90 +1558,6 @@ void MyCanvas::paintEvent(QPaintEvent *event)
                     else
                       painter.setPen(qPen[1]);
                     painter.drawLine(xs,y,xf,y);
-                    xs = xf;
-                  }
-            }
-        }
-
-
-      //  Draw A-read repeat profile if track is present and on
-
-      if (doProf)
-        { int64 *annoQV = (int64 *) model->prf->anno;
-          uint8 *dataQV = (uint8 *) model->prf->data;
-          int    tspace = model->tspace;
-          int    lowT   = palette->profLow;
-          int    hghT   = palette->profHgh;
-          int    y      = (readRow-vbeg)*vbp + 4;
-          bool   tall   = (vbp >= 10.);
-
-          for (p = fpile; p < lpile; p++)
-            { int  x1, xs, xf;
-              int  ab, ae, vl, aend;
-              int  pt, o;
-
-              pt   = annoQV[p];
-              x1   = (pile[p].where-hbeg)*hbp;
-              xs   = x1;
-              aend = db1->reads[p].rlen;
-              if (p+1 == lpile && pile[p].where + aend > iend)
-                aend = iend;
-              if (p == fpile && pile[p].where < ibeg)
-                { o   = (ibeg - pile[p].where) / tspace;
-                  pt += o;
-                }
-              else
-                o = 0;
-              if (palette->profMode == 0)
-                for (ab = o*tspace; ab < aend; ab += tspace)
-                  { ae = ab+tspace;
-                    if (ae > aend)
-                      ae = aend;
-                    xf = x1 + ae*hbp;
-                    vl = dataQV[pt++];
-                    if (vl > 0)
-                      { if (vl == 1)
-                          { painter.setPen(pPen[0]);
-                            painter.drawLine(xs,y,xf,y);
-                          }
-                        else
-                          { vl = vl/10 + 1;
-                            painter.setPen(pPen[vl]);
-                            if (tall)
-                              painter.drawLine(xs,y+vl,xf,y+vl);
-                            else
-                              painter.drawLine(xs,y,xf,y);
-                          }
-                      }
-                    xs = xf;
-                  }
-              else
-                for (ab = o*tspace; ab < aend; ab += tspace)
-                  { ae = ab+tspace;
-                    if (ae > aend)
-                      ae = aend;
-                    xf = x1 + ae*hbp;
-                    vl = dataQV[pt++];
-                    if (vl > 0)
-                      { if (vl <= lowT)
-                          { painter.setPen(pPen[0]);
-                            painter.drawLine(xs,y,xf,y);
-                          }
-                        else if (vl >= hghT)
-                          { painter.setPen(pPen[2]);
-                            if (tall)
-                              painter.drawLine(xs,y-2,xf,y+2);
-                            else
-                              painter.drawLine(xs,y,xf,y);
-                          }
-                        else
-                          { painter.setPen(pPen[1]);
-                            if (tall)
-                              painter.drawLine(xs,y-1,xf,y+1);
-                            else
-                              painter.drawLine(xs,y,xf,y);
-                          }
-                      }
                     xs = xf;
                   }
             }
@@ -2440,36 +2365,6 @@ void PaletteDialog::qualTriChange()
   qualLev[j]->setIcon(QIcon(blob));
 }
 
-void PaletteDialog::profRampChange()
-{ int j;
-  for (j = 0; j < 5; j++)
-    if (profBox[j]->isDown())
-      break;
-  QColor newColor = QColorDialog::getColor(profColor[j],this);
-  profBox[j]->setDown(false);
-  if ( ! newColor.isValid()) return;
-
-  profColor[j] = newColor;
-  QPixmap blob = QPixmap(36,16);
-    blob.fill(newColor);
-  profBox[j]->setIcon(QIcon(blob));
-}
-
-void PaletteDialog::profTriChange()
-{ int j;
-  for (j = 0; j < 3; j++)
-    if (profLev[j]->isDown())
-      break;
-  QColor newColor = QColorDialog::getColor(profHue[j],this);
-  profLev[j]->setDown(false);
-  if ( ! newColor.isValid()) return;
-
-  profHue[j] = newColor;
-  QPixmap blob = QPixmap(16,16);
-    blob.fill(newColor);
-  profLev[j]->setIcon(QIcon(blob));
-}
-
 void PaletteDialog::trackChange()
 { int j;
 
@@ -2571,37 +2466,6 @@ void PaletteDialog::activateQualQV(int state)
       qualTop->setText(tr(""));
       qualBot->clearFocus();
       qualTop->clearFocus();
-    }
-}
-
-void PaletteDialog::activateRepProfile(int state)
-{ bool on;
-  int  j;
-
-  (void) state;
-
-  on = profCheck->isChecked();
-
-  profLabel->setEnabled(on);
-  profLabelScale->setEnabled(on);
-  profRadioScale->setEnabled(on);
-  profLabelTri->setEnabled(on);
-  profRadioTri->setEnabled(on);
-  for (j = 0; j < 5; j++)
-    profBox[j]->setEnabled(on);
-  for (j = 0; j < 3; j++)
-    { profLev[j]->setEnabled(on);
-      profLevLabel[j]->setEnabled(on);
-    }
-  if (on)
-    { profBot->setText(tr("%1").arg(profLow));
-      profTop->setText(tr("%1").arg(profHgh));
-    }
-  else
-    { profBot->setText(tr(""));
-      profTop->setText(tr(""));
-      profBot->clearFocus();
-      profTop->clearFocus();
     }
 }
 
@@ -2751,16 +2615,6 @@ void PaletteDialog::getState(Palette_State &state)
   state.qualBad       = qualBad;
   state.qualonB       = qualonB->isChecked();
 
-  state.profVis       = profVis;
-  state.profqv        = profCheck->isChecked();
-  state.profMode      = profRadioTri->isChecked();
-  for (j = 0; j < 5; j++)
-    state.profColor[j] = profColor[j];
-  for (j = 0; j < 3; j++)
-    state.profHue[j] = profHue[j];
-  state.profLow       = profLow;
-  state.profHgh       = profHgh;
-
   //  Determine order of masks in layout
 
   QVBoxLayout *lman = static_cast<QVBoxLayout *>(maskPanel->layout());
@@ -2803,8 +2657,6 @@ void PaletteDialog::putState(Palette_State &state)
   matchBad      = state.matchBad;
   qualGood      = state.qualGood;
   qualBad       = state.qualBad;
-  profLow       = state.profLow;
-  profHgh       = state.profHgh;
 
   for (j = 0; j < 10; j++)
     matchColor[j] = state.matchColor[j];
@@ -2814,10 +2666,6 @@ void PaletteDialog::putState(Palette_State &state)
     qualColor[j] = state.qualColor[j];
   for (j = 0; j < 3; j++)
     qualHue[j] = state.qualHue[j];
-  for (j = 0; j < 5; j++)
-    profColor[j] = state.profColor[j];
-  for (j = 0; j < 3; j++)
-    profHue[j] = state.profHue[j];
 
   blob.fill(backColor);
   backBox->setIcon(QIcon(blob));
@@ -2865,14 +2713,6 @@ void PaletteDialog::putState(Palette_State &state)
     { blob.fill(qualHue[j]);
       qualLev[j]->setIcon(QIcon(blob));
     }
-  for (j = 0; j < 5; j++)
-    { wlob.fill(profColor[j]);
-      profBox[j]->setIcon(QIcon(wlob));
-    }
-  for (j = 0; j < 3; j++)
-    { blob.fill(profHue[j]);
-      profLev[j]->setIcon(QIcon(blob));
-    }
 
   gridCheck->setChecked(state.showGrid);
   haloCheck->setChecked(state.showHalo);
@@ -2888,11 +2728,6 @@ void PaletteDialog::putState(Palette_State &state)
   if (qualBad >= 0)
     qualTop->setText(tr("%1").arg(qualBad));
 
-  if (profLow >= 0)
-    profBot->setText(tr("%1").arg(profLow));
-  if (profHgh >= 0)
-    profTop->setText(tr("%1").arg(profHgh));
-
   if (compressMax >= 0)
     maxCompress->setText(tr("%1").arg(compressMax));
   if (stretchMax >= 0)
@@ -2903,7 +2738,6 @@ void PaletteDialog::putState(Palette_State &state)
   matchCheck->setChecked(state.matchqv);
   qualCheck->setChecked(state.qualqv);
   qualonB->setChecked(state.qualonB);
-  profCheck->setChecked(state.profqv);
   if (state.matchMode == 0)
     { matchRadioScale->setChecked(true);
       matchStack->setCurrentIndex(0);
@@ -2920,14 +2754,6 @@ void PaletteDialog::putState(Palette_State &state)
     { qualRadioTri->setChecked(true);
       qualStack->setCurrentIndex(1);
     }
-  if (state.profMode == 0)
-    { profRadioScale->setChecked(true);
-      profStack->setCurrentIndex(0);
-    }
-  else
-    { profRadioTri->setChecked(true);
-      profStack->setCurrentIndex(1);
-    }
 
   if (state.matchVis)
     matchCheck->setEnabled(true);
@@ -2942,15 +2768,6 @@ void PaletteDialog::putState(Palette_State &state)
   else
     { qualPanel->setVisible(false);
       qualVis = false;
-    }
-
-  if (state.profVis)
-    { profPanel->setVisible(true);
-      profVis = true;
-    }
-  else
-    { profPanel->setVisible(false);
-      profVis = false;
     }
 
   for (j = 0; j < state.nmasks; j++)
@@ -3003,20 +2820,6 @@ void PaletteDialog::qualBadCheck()
     qualBad = -1;
   else
     qualBad = qualTop->text().toInt();
-}
-
-void PaletteDialog::profLowCheck()
-{ if (profBot->text().isEmpty())
-    profLow = -1;
-  else
-    profLow = profBot->text().toInt();
-}
-
-void PaletteDialog::profHghCheck()
-{ if (profTop->text().isEmpty())
-    profHgh = -1;
-  else
-    profHgh = profTop->text().toInt();
 }
 
 void PaletteDialog::matchGoodCheck()
@@ -3360,7 +3163,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     matchSelect->addWidget(matchLabel);
     matchSelect->addStretch(1);
 
-  matchLabelScale = new QLabel(tr("Ramp"));
+  matchLabelScale = new QLabel(tr("Qualitative"));
   matchRadioScale = new QRadioButton();
 
   QHBoxLayout *matchScale = new QHBoxLayout();
@@ -3396,6 +3199,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     matchRamp->setSpacing(0);
     for (j = 0; j < 10; j++)
       matchRamp->addWidget(matchBox[j]);
+    matchRamp->addSpacing(5);
     matchRamp->addStretch(1);
 
   for (j = 0; j < 3; j++)
@@ -3560,115 +3364,9 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
   qualPanel = new QWidget();
     qualPanel->setLayout(qualLayout);
 
-  //  Repeat profile display, both ramp and tri-state
-
-  profLabel = new QLabel(tr("Show repeat profile"));
-
-  profCheck = new QCheckBox();
-    profCheck->setFixedWidth(30);
-
-  QHBoxLayout *profSelect = new QHBoxLayout();
-    profSelect->addWidget(profCheck);
-    profSelect->addSpacing(11);
-    profSelect->addWidget(profLabel);
-    profSelect->addStretch(1);
-
-  profLabelScale = new QLabel(tr("Ramp"));
-  profRadioScale = new QRadioButton();
-
-  QHBoxLayout *profScale = new QHBoxLayout();
-    profScale->addSpacing(40);
-    profScale->addWidget(profRadioScale);
-    profScale->addSpacing(11);
-    profScale->addWidget(profLabelScale);
-    profScale->addStretch(1);
-
-  profLabelTri = new QLabel(tr("Tri-State"));
-  profRadioTri = new QRadioButton();
-
-  QHBoxLayout *profTristate = new QHBoxLayout();
-    profTristate->addSpacing(40);
-    profTristate->addWidget(profRadioTri);
-    profTristate->addSpacing(11);
-    profTristate->addWidget(profLabelTri);
-    profTristate->addStretch(1);
-
-  QButtonGroup *profOpt = new QButtonGroup(this);
-    profOpt->addButton(profRadioScale,0);
-    profOpt->addButton(profRadioTri,1);
-
-  for (j = 0; j < 5; j++)
-    { profBox[j] = new QToolButton();
-        profBox[j]->setIconSize(QSize(36,16));
-        profBox[j]->setFixedSize(40,20);
-        profBox[j]->setIcon(QIcon(QPixmap(36,16)));
-    }
-
-  QHBoxLayout *profRamp = new QHBoxLayout();
-    profRamp->setContentsMargins(10,5,10,5);
-    profRamp->setSpacing(0);
-    for (j = 0; j < 5; j++)
-      profRamp->addWidget(profBox[j]);
-    profRamp->addStretch(1);
-
-  for (j = 0; j < 3; j++)
-    { profLev[j] = new QToolButton();
-        profLev[j]->setIconSize(QSize(16,16));
-        profLev[j]->setFixedSize(20,20);
-        profLev[j]->setIcon(QIcon(QPixmap(16,16)));
-    }
-
-  profLevLabel[0] = new QLabel(tr("Low")); 
-  profLevLabel[1] = new QLabel(tr("Medium"));
-  profLevLabel[2] = new QLabel(tr("High"));
-
-  profBot = new QLineEdit();
-    profBot->setFixedWidth(24);
-    profBot->setTextMargins(1,0,0,0);
-    profBot->setValidator(validInt);
-
-  profTop = new QLineEdit();
-    profTop->setFixedWidth(24);
-    profTop->setTextMargins(1,0,0,0);
-    profTop->setValidator(validInt);
-
-  QGridLayout *profTri = new QGridLayout();
-    profTri->setContentsMargins(10,5,10,5);
-    profTri->setHorizontalSpacing(10);
-    profTri->setVerticalSpacing(2);
-    for (j = 0; j < 3; j++)
-      { profTri->addWidget(profLev[j], 0,2*j,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
-        profTri->addWidget(profLevLabel[j], 0,2*j+1,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
-      }
-    profTri->addWidget(profBot, 1,0, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
-    profTri->addWidget(profTop, 1,4, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
-    profTri->setColumnStretch(6,1.);
-
-  QWidget *profWidgetScale = new QWidget();
-    profWidgetScale->setLayout(profRamp);
-
-  QWidget *profWidgetTri = new QWidget();
-    profWidgetTri->setLayout(profTri);
-
-  profStack = new QStackedLayout();
-    profStack->addWidget(profWidgetScale);
-    profStack->addWidget(profWidgetTri);
-
-  QVBoxLayout *profLayout = new QVBoxLayout();
-    profLayout->setContentsMargins(0,20,0,0);
-    profLayout->setSpacing(0);
-    profLayout->addLayout(profSelect);
-    profLayout->addLayout(profScale);
-    profLayout->addLayout(profTristate);
-    profLayout->addLayout(profStack);
-
-  profPanel = new QWidget();
-    profPanel->setLayout(profLayout);
-
   QVBoxLayout *qualityLayout = new QVBoxLayout();
     qualityLayout->addWidget(matchPanel,0,Qt::AlignHCenter);
     qualityLayout->addWidget(qualPanel,0,Qt::AlignHCenter);
-    qualityLayout->addWidget(profPanel,0,Qt::AlignHCenter);
     qualityLayout->addStretch(1);
 
   QWidget *qualityTab = new QWidget();
@@ -3801,8 +3499,6 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
 
   qualPanel->setVisible(false);
   qualVis = false;
-  profPanel->setVisible(false);
-  profVis = false;
   nmasks  = 0;
   for (j = 0; j < MAX_TRACKS; j++)
     { trackPanel[j]->setVisible(false);
@@ -3857,12 +3553,6 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
   for (j = 0; j < 3; j++)
     connect(qualLev[j],SIGNAL(pressed()),this,SLOT(qualTriChange()));
 
-  connect(profCheck,SIGNAL(stateChanged(int)),this,SLOT(activateRepProfile(int)));
-  for (j = 0; j < 5; j++)
-    connect(profBox[j],SIGNAL(pressed()),this,SLOT(profRampChange()));
-  for (j = 0; j < 3; j++)
-    connect(profLev[j],SIGNAL(pressed()),this,SLOT(profTriChange()));
-
   for (j = 0; j < MAX_TRACKS; j++)
     { connect(trackBox[j],SIGNAL(pressed()),this,SLOT(trackChange()));
       connect(trackCheck[j],SIGNAL(stateChanged(int)),this,SLOT(activateTracks(int)));
@@ -3875,13 +3565,10 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
   matchRadioScale->setChecked(true);
 
   connect(qualOpt,SIGNAL(buttonClicked(int)),qualStack,SLOT(setCurrentIndex(int)));
-  connect(profOpt,SIGNAL(buttonClicked(int)),profStack,SLOT(setCurrentIndex(int)));
 
   connect(qualBot,SIGNAL(editingFinished()),this,SLOT(qualGoodCheck()));
   connect(qualTop,SIGNAL(editingFinished()),this,SLOT(qualBadCheck()));
   connect(qualonB,SIGNAL(stateChanged(int)),this,SLOT(enforceMatchOff(int)));
-  connect(profBot,SIGNAL(editingFinished()),this,SLOT(profLowCheck()));
-  connect(profTop,SIGNAL(editingFinished()),this,SLOT(profHghCheck()));
   qualRadioScale->setChecked(true);
 }
 
@@ -3968,11 +3655,6 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
     state.qualGood   = settings.value("qualGood",23).toInt();
     state.qualBad    = settings.value("qualBad",27).toInt();
     state.qualonB    = settings.value("qualonB",false).toInt();
-
-    state.profqv     = settings.value("profQV",false).toBool();
-    state.profMode   = settings.value("profMode",0).toInt();
-    state.profLow    = settings.value("profLow",1).toInt();
-    state.profHgh    = settings.value("profHgh",11).toInt();
   settings.endGroup();
 
   state.backColor.setRgb(backRGB);
@@ -3993,10 +3675,6 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
     state.qualColor[j].setRgb(qualRGB[j]);
   for (j = 0; j < 3; j++)
     state.qualHue[j].setRgb(qualTri[j]);
-  for (j = 0; j < 5; j++)
-    state.profColor[j].setRgb(profRGB[j]);
-  for (j = 0; j < 3; j++)
-    state.profHue[j].setRgb(profTri[j]);
 
   if (state.elimColor == black)
     state.drawElim = -1;
@@ -4007,7 +3685,6 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
 
   state.matchVis = matchCheck->isEnabled();
   state.qualVis = qualVis;
-  state.profVis = profVis;
 
   for (j = 0; j < nmasks; j++)
     { char *s = track[j]->name;
@@ -4076,16 +3753,6 @@ void PaletteDialog::writeSettings(QSettings &settings)
     settings.setValue("qualGood", qualGood);
     settings.setValue("qualBad", qualBad);
     settings.setValue("qualonB", qualonB->isChecked());
-
-    settings.setValue("profQV", profCheck->isChecked());
-    for (j = 0; j < 5; j++)
-      settings.setValue(tr("prof%1").arg(j),profColor[j].rgb());
-    settings.setValue(tr("profGood"),profHue[0].rgb());
-    settings.setValue(tr("profMid"),profHue[1].rgb());
-    settings.setValue(tr("profBad"),profHue[2].rgb());
-    settings.setValue("profMode", profRadioTri->isChecked());
-    settings.setValue("profLow", profLow);
-    settings.setValue("profHgh", profHgh);
 
     for (j = 0; j < nmasks; j++)
       { char *name = track[j]->name;
@@ -4185,30 +3852,6 @@ bool PaletteDialog::readView(Palette_State &state, QString &view)
       }
     state.qualVis = qualVis;
 
-    state.profVis  = settings.value("profVis").toBool();
-    if (state.profVis)
-      { state.profqv   = settings.value("profQV").toBool();
-        state.profMode = settings.value("profMode").toInt();
-        for (j = 0; j < 5; j++)
-          state.profColor[j].setRgb(settings.value(tr("prof%1").arg(j)).toUInt());
-        state.profHue[0].setRgb(settings.value("profGood").toUInt());
-        state.profHue[1].setRgb(settings.value("profMid").toUInt());
-        state.profHue[2].setRgb(settings.value("profBad").toUInt());
-        state.profLow  = settings.value("profLow").toInt();
-        state.profHgh  = settings.value("profHgh").toInt();
-      }
-    else
-      { state.profqv        = profCheck->isChecked();
-        state.profMode      = profRadioTri->isChecked();
-        for (j = 0; j < 5; j++)
-          state.profColor[j] = profColor[j];
-        for (j = 0; j < 3; j++)
-          state.profHue[j] = profHue[j];
-        state.profLow       = profLow;
-        state.profHgh       = profHgh;
-      }
-    state.profVis = profVis;
-
     QVBoxLayout *lman = static_cast<QVBoxLayout *>(maskPanel->layout());
     QList<QObject *> ord(maskPanel->children());
 
@@ -4305,17 +3948,6 @@ void PaletteDialog::writeView(Palette_State &state, QString &view)
     settings.setValue("qualGood", state.qualGood);
     settings.setValue("qualBad", state.qualBad);
     settings.setValue("qualonB", state.qualonB);
-
-    settings.setValue("profVis",state.profVis);
-    settings.setValue("profQV",state.profqv);
-    settings.setValue("profMode",state.profMode);
-    for (j = 0; j < 5; j++)
-      settings.setValue(tr("prof%1").arg(j),state.profColor[j].rgb());
-    settings.setValue(tr("profGood"),state.profHue[0].rgb());
-    settings.setValue(tr("profMid"),state.profHue[1].rgb());
-    settings.setValue(tr("profBad"),state.profHue[2].rgb());
-    settings.setValue("profLow", state.profLow);
-    settings.setValue("profHgh", state.profHgh);
 
     settings.setValue("nmasks",state.nmasks);
     for (j = 0; j < state.nmasks; j++)
@@ -4775,6 +4407,7 @@ void OpenDialog::writeSettings(QSettings &settings)
 
 QList<MainWindow *> MainWindow::frames;
 QList<DotWindow  *> MainWindow::plots;
+QList<ProfWindow *> MainWindow::profs;
 Palette_State       MainWindow::palette;
 Open_State          MainWindow::dataset;
 int                 MainWindow::numLive;
@@ -5170,6 +4803,8 @@ void MainWindow::closeEvent(QCloseEvent *event)
           frames[i]->close();
       for (i = plots.length()-1; i >= 0; i--)
         plots[i]->close();
+      for (i = profs.length()-1; i >= 0; i--)
+        profs[i]->close();
       event->accept();
       return;
     }
@@ -5191,6 +4826,9 @@ void MainWindow::closeAll()
 
   for (i = plots.length()-1; i >= 0; i--)
     plots[i]->close();
+
+  for (i = profs.length()-1; i >= 0; i--)
+    profs[i]->close();
 }
 
 void MainWindow::fullScreen()
@@ -5242,7 +4880,7 @@ int PaletteDialog::loadTracks(Palette_State &state, DataModel *model)
     j = 0;
     cnt = 0;
     for (t = model->db1->tracks; t != NULL; t = t->next)
-      if (t != model->qvs && t != model->prf)
+      if (t != model->qvs)
         { a = settings.value(tr("track.%1.Apos").arg(t->name),-1).toInt();
           if (a >= 0)
             { QRgb tRGB = settings.value(tr("track.%1.color").arg(t->name)).toUInt();
@@ -5272,7 +4910,6 @@ int PaletteDialog::loadTracks(Palette_State &state, DataModel *model)
     state.nmasks  = j;
     state.matchVis = (model->tspace != 0);
     state.qualVis = (model->qvs != NULL);
-    state.profVis = (model->prf != NULL);
   settings.endGroup();
 
   return (cnt);

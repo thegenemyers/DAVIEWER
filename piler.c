@@ -806,6 +806,8 @@ DataModel *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
         Close_DB(MODEL.db2);
       Close_DB(MODEL.db1);
       Free_DB_Stub(MODEL.stub);
+      if (MODEL.prof != NULL)
+        Free_Profiles(MODEL.prof);
     }
   UNDEFINED = 1;
 
@@ -935,6 +937,7 @@ DataModel *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
       Trim_DB(MODEL.db2);
     }
   Trim_DB(MODEL.db1);
+  MODEL.prof = NULL;
 
   if (List_DB_Files(Adb,OPEN_MASKS))
     goto error_db;
@@ -947,16 +950,8 @@ DataModel *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
       read[i].flags &= (DB_CCS | DB_BEST);
   }
 
-  { int kind;
-
-    if (Check_Track(MODEL.db1,"prof",&kind) > -2)
-      { MODEL.prf = Open_Track(MODEL.db1,"prof");
-        if (MODEL.prf == NULL)
-          goto error_db;
-        Load_All_Track_Data(MODEL.prf);
-      }
-    else
-      MODEL.prf = NULL;
+  { int   kind;
+    char *dot;
 
     if (Check_Track(MODEL.db1,"qual",&kind) > -2)
       { MODEL.qvs = Open_Track(MODEL.db1,"qual");
@@ -966,6 +961,11 @@ DataModel *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
       }
     else
       MODEL.qvs = NULL;
+
+    dot = rindex(Adb,'.');
+    *dot = '\0';
+    MODEL.prof = Open_Profiles(Catenate(Adb,".prof","",""));
+    *dot = '.';
   }
 
   if (buildModel(&MODEL,novl,off,nolink,nolap,elim,max_comp,max_expn))
@@ -983,7 +983,7 @@ DataModel *openModel(char *Alas, char *Adb, char *Bdb, int first, int last,
       }
     MODEL.db1->tracks = u;
 
-    for (t = MODEL.db1->tracks; t != MODEL.qvs && t != MODEL.prf; t = t->next)
+    for (t = MODEL.db1->tracks; t != MODEL.qvs; t = t->next)
       { anno = (int64 *) (t->anno);
         for (j = 0; j <= MODEL.db1->nreads; j++) 
           anno[j] >>= 2;
@@ -997,6 +997,8 @@ error_db:
   if (MODEL.db2 != MODEL.db1)
     Close_DB(MODEL.db2);
   Close_DB(MODEL.db1);
+  if (MODEL.prof != NULL)
+   Free_Profiles(MODEL.prof);
 error_stub:
   Free_DB_Stub(stub);
 error_las:
