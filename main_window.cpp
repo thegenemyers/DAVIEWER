@@ -981,7 +981,7 @@ void MyCanvas::paintEvent(QPaintEvent *event)
       int         tIndex[palette->nmasks];
       int         readRow, firstBRow;
 
-      QPen     cPen, dPen, rPen, hPen, ePen, qPen[10], mPen[10], pPen[20];
+      QPen     cPen, dPen, rPen, hPen, ePen, qPen[10], mPen[model->tspace], pPen[20];
       QColor   stretch [21];
       QColor   compress[21];
       double   stfact, cmfact;
@@ -1155,21 +1155,70 @@ void MyCanvas::paintEvent(QPaintEvent *event)
           }
 
         if ( ! doPile && palette->matchqv)
-          { int j;
+          { int i, j;
 
             if (palette->matchMode == 0)
-              { for (j = 0; j < 10; j++)
-                  { mPen[j].setWidth(2);
-                    mPen[j].setCapStyle(Qt::FlatCap);
-                    mPen[j].setColor(palette->matchColor[j]);
+              { j = 1;
+                for (i = 0; i < model->tspace; i++)
+                  { while (i*200 > (2*j*palette->matchStride-1)*model->tspace)
+                      { if (j >= palette->matchBoxes)
+                          break;
+                        j += 1;
+                      }
+                    mPen[i].setWidth(2);
+                    mPen[i].setCapStyle(Qt::FlatCap);
+                    mPen[i].setColor(palette->matchQualColor[j-1]);
+                  }
+              }
+            else if (palette->matchMode == 1)
+              { for (i = 0; i < model->tspace; i++)
+                  { mPen[i].setWidth(2);
+                    mPen[i].setCapStyle(Qt::FlatCap);
+                    if (i*100 > palette->matchGood*model->tspace)
+                      if (i*100 <= palette->matchBad*model->tspace)
+                        mPen[i].setColor(palette->matchTriColor[1]);
+		      else
+                        mPen[i].setColor(palette->matchTriColor[2]);
+                    else
+                      mPen[i].setColor(palette->matchTriColor[0]);
                   }
               }
             else
-              for (j = 0; j < 3; j++)
-                { mPen[j].setWidth(2);
-                  mPen[j].setCapStyle(Qt::FlatCap);
-                  mPen[j].setColor(palette->matchHue[j]);
-                }
+              { int mid = (palette->matchMid * model->tspace) / 100;
+                int max = (palette->matchMax * model->tspace) / 100;
+                int r0, g0, b0;
+                int r1, g1, b1;
+                int r2, g2, b2;
+       
+                r0 = palette->matchRampColor[0].red();
+                g0 = palette->matchRampColor[0].green();
+                b0 = palette->matchRampColor[0].blue();
+                r1 = palette->matchRampColor[1].red();
+                g1 = palette->matchRampColor[1].green();
+                b1 = palette->matchRampColor[1].blue();
+                r2 = palette->matchRampColor[2].red();
+                g2 = palette->matchRampColor[2].green();
+                b2 = palette->matchRampColor[2].blue();
+                for (i = 0; i <= mid; i++)
+                  { mPen[i].setWidth(2);
+                    mPen[i].setCapStyle(Qt::FlatCap);
+                    mPen[i].setColor( QColor( (r0 * (mid-i) + r1 * i) / mid,
+                                              (g0 * (mid-i) + g1 * i) / mid,
+                                              (b0 * (mid-i) + b1 * i) / mid ) );
+                  }
+                for (i = mid+1; i <= max; i++)
+                  { mPen[i].setWidth(2);
+                    mPen[i].setCapStyle(Qt::FlatCap);
+                    mPen[i].setColor( QColor( (r1 * (max-i) + r2 * (i-mid)) / (max-mid),
+                                              (g1 * (max-i) + g2 * (i-mid)) / (max-mid),
+                                              (b1 * (max-i) + b2 * (i-mid)) / (max-mid) ) );
+                  }
+                for (i = max+1; i < model->tspace; i++)
+                  { mPen[i].setWidth(2);
+                    mPen[i].setCapStyle(Qt::FlatCap);
+                    mPen[i].setColor(palette->matchRampColor[2]);
+                  }
+              }
           }
       }
 
@@ -1616,8 +1665,8 @@ void MyCanvas::paintEvent(QPaintEvent *event)
           uint8 *trace  = (uint8 *) model->tbuf;
           int    tspace = model->tspace;
           int    iosize = sizeof(Overlap) - sizeof(void *);
-          int    lowT   = palette->matchGood;
-          int    hghT   = palette->matchBad;
+          // int    lowT   = palette->matchGood;
+          // int    hghT   = palette->matchBad;
           int    lowQ   = palette->qualGood;
           int    hghQ   = palette->qualBad;
 
@@ -1729,114 +1778,37 @@ void MyCanvas::paintEvent(QPaintEvent *event)
 
                       ae = (ab/tspace)*tspace;
                       xs = x1 + ab*hbp;
-                      if (palette->matchMode == 0)
-                        { if (ae < ab)
-                            { ae = ae+tspace;
-                              xf = x1 + ae*hbp;
-#ifdef HIFI
-                              vl = (trace[pt]*100.)/(ae-ab);
-#else
-                              vl = (trace[pt]*20.)/(ae-ab);
-#endif
-                              if (vl >= 10)
-                                vl = 9;
-			      // if (ae-ab >= 20)
-                                // vl = (trace[pt]*40.)/((ae-ab) + trace[pt+1]);
-                              // else
-                                // vl = 19;
-                              pt += 2;
-                              painter.setPen(mPen[vl]);
-                              painter.drawLine(xs,y,xf,y);
-                              ab = ae;
-                              xs = xf;
-                            }
-                          while (ab < aend)
-                            { ae = ae + tspace;
-                              if (ae > aend)
-                                { xf = x1 + aend*hbp;
-#ifdef HIFI
-                                  vl = (trace[pt]*100.)/(aend-ab);
-#else
-                                  vl = (trace[pt]*20.)/(aend-ab);
-#endif
-                                  if (vl >= 10)
-                                    vl = 9;
-                                  // if (aend-ab >= 20)
-                                    // vl = (trace[pt]*40.)/((aend-ab) + trace[pt+1]);
-                                  // else
-                                    // vl = 19;
-                                  pt += 2;
-                                  painter.setPen(mPen[vl]);
-                                  painter.drawLine(xs,y,xf,y);
-                                  break;
-                                }
-                              xf = x1 + ae*hbp;
-#ifdef HIFI
-                              vl = trace[pt];
-#else
-                              vl = trace[pt]/5;
-#endif
-                              if (vl >= 10)
-                                vl = 9;
-                              pt += 2;
-                              painter.setPen(mPen[vl]);
-                              painter.drawLine(xs,y,xf,y);
-                              ab = ae;
-                              xs = xf;
-                            }
+                      if (ae < ab)
+                        { ae = ae+tspace;
+                          xf = x1 + ae*hbp;
+                          vl = (trace[pt]*tspace)/(ae-ab);
+                          if (vl >= tspace)
+                            vl = tspace-1;
+                          pt += 2;
+                          painter.setPen(mPen[vl]);
+                          painter.drawLine(xs,y,xf,y);
+                          ab = ae;
+                          xs = xf;
                         }
-                      else
-                        { if (ae < ab)
-                            { ae = ae+tspace;
-                              xf = x1 + ae*hbp;
-                              vl = (trace[pt]*100.)/(ae-ab);
-                              // if (ae-ab >= 20)
-                                // vl = (trace[pt]*200.)/((ae-ab) + trace[pt+1]);
-                              // else
-                                // vl = 100;
+                      while (ab < aend)
+                        { ae = ae + tspace;
+                          if (ae > aend)
+                            { xf = x1 + aend*hbp;
+                              vl = (trace[pt]*tspace)/(aend-ab);
+                              if (vl >= tspace)
+                                vl = tspace-1;
                               pt += 2;
-                              if (vl <= lowT)
-                                painter.setPen(mPen[0]);
-                              else if (vl >= hghT)
-                                painter.setPen(mPen[2]);
-                              else
-                                painter.setPen(mPen[1]);
+                              painter.setPen(mPen[vl]);
                               painter.drawLine(xs,y,xf,y);
-                              ab = ae;
-                              xs = xf;
+                              break;
                             }
-                          while (ab < aend)
-                            { ae = ae + tspace;
-                              if (ae > aend)
-                                { xf = x1 + aend*hbp;
-                                  vl = (trace[pt]*100.)/(aend-ab);
-                                  // if (aend-ab >= 20)
-                                    // vl = (trace[pt]*200.)/((aend-ab) + trace[pt+1]);
-                                  // else
-                                    // vl = 100;
-                                  pt += 2;
-                                  if (vl <= lowT)
-                                    painter.setPen(mPen[0]);
-                                  else if (vl >= hghT)
-                                    painter.setPen(mPen[2]);
-                                  else
-                                    painter.setPen(mPen[1]);
-                                  painter.drawLine(xs,y,xf,y);
-                                  break;
-                                }
-                              xf = x1 + ae*hbp;
-                              vl = trace[pt];
-                              pt += 2;
-                              if (vl <= lowT)
-                                painter.setPen(mPen[0]);
-                              else if (vl >= hghT)
-                                painter.setPen(mPen[2]);
-                              else
-                                painter.setPen(mPen[1]);
-                              painter.drawLine(xs,y,xf,y);
-                              ab = ae;
-                              xs = xf;
-                            }
+                          xf = x1 + ae*hbp;
+                          vl = trace[pt];
+                          pt += 2;
+                          painter.setPen(mPen[vl]);
+                          painter.drawLine(xs,y,xf,y);
+                          ab = ae;
+                          xs = xf;
                         }
                       pt += iosize;
                     }
@@ -2305,34 +2277,49 @@ COLOR_CHANGE(stretchChange,stretchColor,stretchBox)
 COLOR_CHANGE(neutralChange,neutralColor,neutralBox)
 COLOR_CHANGE(compressChange,compressColor,compressBox)
 
-void PaletteDialog::matchRampChange()
+void PaletteDialog::matchQualChange()
 { int j;
   for (j = 0; j < 10; j++)
-    if (matchBox[j]->isDown())
+    if (matchQualBox[j]->isDown())
       break;
-  QColor newColor = QColorDialog::getColor(matchColor[j],this);
-  matchBox[j]->setDown(false);
+  QColor newColor = QColorDialog::getColor(matchQualColor[j],this);
+  matchQualBox[j]->setDown(false);
   if ( ! newColor.isValid()) return;
 
-  matchColor[j] = newColor;
+  matchQualColor[j] = newColor;
   QPixmap blob = QPixmap(16,16);
     blob.fill(newColor);
-  matchBox[j]->setIcon(QIcon(blob));
+  matchQualBox[j]->setIcon(QIcon(blob));
 }
 
 void PaletteDialog::matchTriChange()
 { int j;
   for (j = 0; j < 3; j++)
-    if (matchLev[j]->isDown())
+    if (matchTriBox[j]->isDown())
       break;
-  QColor newColor = QColorDialog::getColor(matchHue[j],this);
-  matchLev[j]->setDown(false);
+  QColor newColor = QColorDialog::getColor(matchTriColor[j],this);
+  matchTriBox[j]->setDown(false);
   if ( ! newColor.isValid()) return;
 
-  matchHue[j] = newColor;
+  matchTriColor[j] = newColor;
   QPixmap blob = QPixmap(16,16);
     blob.fill(newColor);
-  matchLev[j]->setIcon(QIcon(blob));
+  matchTriBox[j]->setIcon(QIcon(blob));
+}
+
+void PaletteDialog::matchRampChange()
+{ int j;
+  for (j = 0; j < 3; j++)
+    if (matchRampBox[j]->isDown())
+      break;
+  QColor newColor = QColorDialog::getColor(matchRampColor[j],this);
+  matchRampBox[j]->setDown(false);
+  if ( ! newColor.isValid()) return;
+
+  matchRampColor[j] = newColor;
+  QPixmap blob = QPixmap(16,16);
+    blob.fill(newColor);
+  matchRampBox[j]->setIcon(QIcon(blob));
 }
 
 void PaletteDialog::qualRampChange()
@@ -2414,26 +2401,44 @@ void PaletteDialog::activateMatchQV(int state)
   on = matchCheck->isChecked();
 
   matchLabel->setEnabled(on);
-  matchLabelScale->setEnabled(on);
-  matchRadioScale->setEnabled(on);
-  matchLabelTri->setEnabled(on);
-  matchRadioTri->setEnabled(on);
+  matchQualLabel->setEnabled(on);
+  matchQualRadio->setEnabled(on);
+  matchBoxLabel->setEnabled(on);
+  matchQualBoxes->setEnabled(on);
+  matchStrideLabel->setEnabled(on);
+  matchTriLabel->setEnabled(on);
+  matchTriRadio->setEnabled(on);
+  matchRampLabel->setEnabled(on);
+  matchRampRadio->setEnabled(on);
   for (j = 0; j < 10; j++)
-    matchBox[j]->setEnabled(on);
+    matchQualBox[j]->setEnabled(on);
   for (j = 0; j < 3; j++)
-    { matchLev[j]->setEnabled(on);
-      matchLevLabel[j]->setEnabled(on);
+    { matchTriBox[j]->setEnabled(on);
+      matchTriLevel[j]->setEnabled(on);
+    }
+  for (j = 0; j < 3; j++)
+    { matchRampBox[j]->setEnabled(on);
+      matchRampLevel[j]->setEnabled(on);
     }
   if (on)
-    { matchBot->setText(tr("%1").arg(matchGood));
-      matchTop->setText(tr("%1").arg(matchBad));
+    { matchStrideEdit->setText(tr("%1").arg(matchStride));
+      matchGoodEdit->setText(tr("%1").arg(matchGood));
+      matchBadEdit->setText(tr("%1").arg(matchBad));
+      matchMidEdit->setText(tr("%1").arg(matchMid));
+      matchMaxEdit->setText(tr("%1").arg(matchMax));
       qualonB->setChecked(false);
     }
   else
-    { matchBot->setText(tr(""));
-      matchTop->setText(tr(""));
-      matchBot->clearFocus();
-      matchTop->clearFocus();
+    { matchStrideEdit->setText(tr(""));
+      matchGoodEdit->setText(tr(""));
+      matchBadEdit->setText(tr(""));
+      matchMidEdit->setText(tr(""));
+      matchMaxEdit->setText(tr(""));
+      matchStrideEdit->clearFocus();
+      matchGoodEdit->clearFocus();
+      matchBadEdit->clearFocus();
+      matchMidEdit->clearFocus();
+      matchMaxEdit->clearFocus();
     }
 }
 
@@ -2595,14 +2600,24 @@ void PaletteDialog::getState(Palette_State &state)
   state.stretchMax    = stretchMax;
   state.compressMax   = compressMax;
 
+  state.matchVis      = matchVis;
   state.matchqv       = matchCheck->isChecked();
-  state.matchMode     = matchRadioTri->isChecked();
+  if (matchRampRadio->isChecked())
+    state.matchMode = 2;
+  else
+    state.matchMode = matchTriRadio->isChecked();
   for (j = 0; j < 10; j++)
-    state.matchColor[j] = matchColor[j];
+    state.matchQualColor[j] = matchQualColor[j];
   for (j = 0; j < 3; j++)
-    state.matchHue[j] = matchHue[j];
+    state.matchTriColor[j] = matchTriColor[j];
+  for (j = 0; j < 3; j++)
+    state.matchRampColor[j] = matchRampColor[j];
   state.matchGood     = matchGood;
   state.matchBad      = matchBad;
+  state.matchMid      = matchMid;
+  state.matchMax      = matchMax;
+  state.matchStride   = matchStride;
+  state.matchBoxes    = matchBoxes;
 
   state.qualVis       = qualVis;
   state.qualqv        = qualCheck->isChecked();
@@ -2655,13 +2670,18 @@ void PaletteDialog::putState(Palette_State &state)
   stretchMax    = state.stretchMax;
   matchGood     = state.matchGood;
   matchBad      = state.matchBad;
+  matchMid      = state.matchMid;
+  matchMax      = state.matchMax;
+  matchStride   = state.matchStride;
   qualGood      = state.qualGood;
   qualBad       = state.qualBad;
 
   for (j = 0; j < 10; j++)
-    matchColor[j] = state.matchColor[j];
+    matchQualColor[j] = state.matchQualColor[j];
   for (j = 0; j < 3; j++)
-    matchHue[j] = state.matchHue[j];
+    matchTriColor[j] = state.matchTriColor[j];
+  for (j = 0; j < 3; j++)
+    matchRampColor[j] = state.matchRampColor[j];
   for (j = 0; j < 10; j++)
     qualColor[j] = state.qualColor[j];
   for (j = 0; j < 3; j++)
@@ -2698,12 +2718,16 @@ void PaletteDialog::putState(Palette_State &state)
   compressBox->setIcon(QIcon(blob));
 
   for (j = 0; j < 10; j++)
-    { blob.fill(matchColor[j]);
-      matchBox[j]->setIcon(QIcon(blob));
+    { blob.fill(matchQualColor[j]);
+      matchQualBox[j]->setIcon(QIcon(blob));
     }
   for (j = 0; j < 3; j++)
-    { blob.fill(matchHue[j]);
-      matchLev[j]->setIcon(QIcon(blob));
+    { blob.fill(matchTriColor[j]);
+      matchTriBox[j]->setIcon(QIcon(blob));
+    }
+  for (j = 0; j < 3; j++)
+    { blob.fill(matchRampColor[j]);
+      matchRampBox[j]->setIcon(QIcon(blob));
     }
   for (j = 0; j < 10; j++)
     { blob.fill(qualColor[j]);
@@ -2719,9 +2743,16 @@ void PaletteDialog::putState(Palette_State &state)
   elimCheck->setChecked(state.showElim);
 
   if (matchGood >= 0)
-    matchBot->setText(tr("%1").arg(matchGood));
+    matchGoodEdit->setText(tr("%1").arg(matchGood));
   if (matchBad >= 0)
-    matchTop->setText(tr("%1").arg(matchBad));
+    matchBadEdit->setText(tr("%1").arg(matchBad));
+  if (matchMid >= 0)
+    matchMidEdit->setText(tr("%1").arg(matchMid));
+  if (matchMax >= 0)
+    matchMaxEdit->setText(tr("%1").arg(matchMax));
+  if (matchStride >= 0)
+    matchStrideEdit->setText(tr("%1").arg(matchStride));
+  matchQualBoxes->setCurrentIndex(state.matchBoxes-2);
 
   if (qualGood >= 0)
     qualBot->setText(tr("%1").arg(qualGood));
@@ -2739,12 +2770,16 @@ void PaletteDialog::putState(Palette_State &state)
   qualCheck->setChecked(state.qualqv);
   qualonB->setChecked(state.qualonB);
   if (state.matchMode == 0)
-    { matchRadioScale->setChecked(true);
+    { matchQualRadio->setChecked(true);
       matchStack->setCurrentIndex(0);
     }
-  else
-    { matchRadioTri->setChecked(true);
+  else if (state.matchMode == 1)
+    { matchTriRadio->setChecked(true);
       matchStack->setCurrentIndex(1);
+    }
+  else
+    { matchRampRadio->setChecked(true);
+      matchStack->setCurrentIndex(2);
     }
   if (state.qualMode == 0)
     { qualRadioScale->setChecked(true);
@@ -2755,20 +2790,18 @@ void PaletteDialog::putState(Palette_State &state)
       qualStack->setCurrentIndex(1);
     }
 
-  if (state.matchVis)
+  matchVis = state.matchVis;
+  if (matchVis)
     matchCheck->setEnabled(true);
   else
     { matchCheck->setChecked(false);
       matchCheck->setEnabled(false);
     }
-  if (state.qualVis)
-    { qualPanel->setVisible(true);
-      qualVis = true;
-    }
+  qualVis = state.qualVis;
+  if (qualVis)
+    qualPanel->setVisible(true);
   else
-    { qualPanel->setVisible(false);
-      qualVis = false;
-    }
+    qualPanel->setVisible(false);
 
   for (j = 0; j < state.nmasks; j++)
     { trackPanel[j]->setVisible(true);
@@ -2823,17 +2856,38 @@ void PaletteDialog::qualBadCheck()
 }
 
 void PaletteDialog::matchGoodCheck()
-{ if (matchBot->text().isEmpty())
+{ if (matchGoodEdit->text().isEmpty())
     matchGood = -1;
   else
-    matchGood = matchBot->text().toInt();
+    matchGood = matchGoodEdit->text().toInt();
 }
 
 void PaletteDialog::matchBadCheck()
-{ if (matchTop->text().isEmpty())
+{ if (matchBadEdit->text().isEmpty())
     matchBad = -1;
   else
-    matchBad = matchTop->text().toInt();
+    matchBad = matchBadEdit->text().toInt();
+}
+
+void PaletteDialog::matchMidCheck()
+{ if (matchMidEdit->text().isEmpty())
+    matchMid = -1;
+  else
+    matchMid = matchMidEdit->text().toInt();
+}
+
+void PaletteDialog::matchMaxCheck()
+{ if (matchMaxEdit->text().isEmpty())
+    matchMax = -1;
+  else
+    matchMax = matchMaxEdit->text().toInt();
+}
+
+void PaletteDialog::matchStrideCheck()
+{ if (matchStrideEdit->text().isEmpty())
+    matchStride = -1;
+  else
+    matchStride = matchStrideEdit->text().toInt();
 }
 
 void PaletteDialog::addView()
@@ -2900,6 +2954,25 @@ void PaletteDialog::changeView(int idx)
       if (readView(state,name))
         putState(state);
     }
+}
+
+void PaletteDialog::matchBoxChange(int idx)
+{ int i;
+
+  idx += 2;
+  if (idx > matchBoxes)
+    { for (i = idx-1; i >= matchBoxes; i--)
+        { matchQualStack->insertWidget(matchBoxes,matchQualBox[i]);
+          matchQualBox[i]->setVisible(true);
+        }
+    }
+  else
+    { for (i = idx; i < matchBoxes; i++)
+        { matchQualStack->removeWidget(matchQualBox[i]);
+          matchQualBox[i]->setVisible(false);
+        }
+    }
+  matchBoxes = idx;
 }
 
 void PaletteDialog::symmetricDB(bool yes)
@@ -3150,10 +3223,11 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
 
   // TAB 2: Quality Options
 
-  //  Match QV display, both ramp and tri-state
+  //  Match QV display: qualitative, ramp, and tri-state
+
+  QStringList boxes = { "2", "3", "4", "5", "6", "7", "8", "9", "10" };
 
   matchLabel = new QLabel(tr("Show match qv's"));
-
   matchCheck = new QCheckBox();
     matchCheck->setFixedWidth(30);
 
@@ -3163,93 +3237,160 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     matchSelect->addWidget(matchLabel);
     matchSelect->addStretch(1);
 
-  matchLabelScale = new QLabel(tr("Qualitative"));
-  matchRadioScale = new QRadioButton();
+  matchQualLabel = new QLabel(tr("Qualitative"));
+  matchQualRadio = new QRadioButton();
+  matchQualBoxes   = new QComboBox();
+     matchQualBoxes->addItems(boxes);
+  matchBoxLabel = new QLabel(tr("Boxes"));
 
-  QHBoxLayout *matchScale = new QHBoxLayout();
-    matchScale->addSpacing(40);
-    matchScale->addWidget(matchRadioScale);
-    matchScale->addSpacing(11);
-    matchScale->addWidget(matchLabelScale);
-    matchScale->addStretch(1);
+  QHBoxLayout *matchQual = new QHBoxLayout();
+    matchQual->addSpacing(40);
+    matchQual->addWidget(matchQualRadio);
+    matchQual->addSpacing(11);
+    matchQual->addWidget(matchQualLabel);
+    matchQual->addSpacing(15);
+    matchQual->addWidget(matchQualBoxes);
+    matchQual->addSpacing(5);
+    matchQual->addWidget(matchBoxLabel);
+    matchQual->addStretch(1);
 
-  matchLabelTri = new QLabel(tr("Tri-State"));
-  matchRadioTri = new QRadioButton();
+  matchTriLabel = new QLabel(tr("Tri-State"));
+  matchTriRadio = new QRadioButton();
 
-  QHBoxLayout *matchTristate = new QHBoxLayout();
-    matchTristate->addSpacing(40);
-    matchTristate->addWidget(matchRadioTri);
-    matchTristate->addSpacing(11);
-    matchTristate->addWidget(matchLabelTri);
-    matchTristate->addStretch(1);
+  QHBoxLayout *matchTri = new QHBoxLayout();
+    matchTri->addSpacing(40);
+    matchTri->addWidget(matchTriRadio);
+    matchTri->addSpacing(11);
+    matchTri->addWidget(matchTriLabel);
+    matchTri->addStretch(1);
 
-  QButtonGroup *matchOpt = new QButtonGroup(this);
-    matchOpt->addButton(matchRadioScale,0);
-    matchOpt->addButton(matchRadioTri,1);
-
-  for (j = 0; j < 10; j++)
-    { matchBox[j] = new QToolButton();
-	    matchBox[j]->setIconSize(QSize(16,16));
-        matchBox[j]->setFixedSize(20,20);
-        matchBox[j]->setIcon(QIcon(QPixmap(16,16)));
-    }
+  matchRampLabel = new QLabel(tr("Ramp"));
+  matchRampRadio = new QRadioButton();
 
   QHBoxLayout *matchRamp = new QHBoxLayout();
-    matchRamp->setContentsMargins(10,5,10,5);
-    matchRamp->setSpacing(0);
-    for (j = 0; j < 10; j++)
-      matchRamp->addWidget(matchBox[j]);
-    matchRamp->addSpacing(5);
+    matchRamp->addSpacing(40);
+    matchRamp->addWidget(matchRampRadio);
+    matchRamp->addSpacing(11);
+    matchRamp->addWidget(matchRampLabel);
     matchRamp->addStretch(1);
 
-  for (j = 0; j < 3; j++)
-    { matchLev[j] = new QToolButton();
-        matchLev[j]->setIconSize(QSize(16,16));
-        matchLev[j]->setFixedSize(20,20);
-        matchLev[j]->setIcon(QIcon(QPixmap(16,16)));
+  QButtonGroup *matchOpt = new QButtonGroup(this);
+    matchOpt->addButton(matchQualRadio,0);
+    matchOpt->addButton(matchTriRadio,1);
+    matchOpt->addButton(matchRampRadio,2);
+
+  for (j = 0; j < 10; j++)
+    { matchQualBox[j] = new QToolButton();
+      matchQualBox[j]->setIconSize(QSize(16,16));
+      matchQualBox[j]->setFixedSize(20,20);
+      matchQualBox[j]->setIcon(QIcon(QPixmap(16,16)));
     }
 
-  matchLevLabel[0] = new QLabel(tr("Good"));
-  matchLevLabel[1] = new QLabel(tr("Unsure"));
-  matchLevLabel[2] = new QLabel(tr("Bad"));
+  matchStrideLabel = new QLabel(tr("Stride:"));
+  matchStrideEdit = new QLineEdit();
+    matchStrideEdit->setFixedWidth(22);
+    matchStrideEdit->setTextMargins(1,0,0,0);
+    matchStrideEdit->setValidator(validInt);
 
-  matchBot = new QLineEdit();
-    matchBot->setFixedWidth(24);
-    matchBot->setTextMargins(1,0,0,0);
-    matchBot->setValidator(validInt);
+  matchQualStack = new QHBoxLayout();
+    matchQualStack->setContentsMargins(10,5,10,5);
+    matchQualStack->setSpacing(0);
+    for (j = 0; j < 10; j++)
+      matchQualStack->addWidget(matchQualBox[j]);
+    matchQualStack->addSpacing(10);
+    matchQualStack->addWidget(matchStrideLabel);
+    matchQualStack->addSpacing(2);
+    matchQualStack->addWidget(matchStrideEdit);
+    matchQualStack->addStretch(1);
+  matchBoxes = 10;
 
-  matchTop = new QLineEdit();
-    matchTop->setFixedWidth(24);
-    matchTop->setTextMargins(1,0,0,0);
-    matchTop->setValidator(validInt);
+  for (j = 0; j < 3; j++)
+    { matchTriBox[j] = new QToolButton();
+        matchTriBox[j]->setIconSize(QSize(16,16));
+        matchTriBox[j]->setFixedSize(20,20);
+        matchTriBox[j]->setIcon(QIcon(QPixmap(16,16)));
+    }
 
-  QGridLayout *matchTri = new QGridLayout();
-    matchTri->setContentsMargins(10,5,10,5);
-    matchTri->setHorizontalSpacing(10);
-    matchTri->setVerticalSpacing(2);
+  matchTriLevel[0] = new QLabel(tr("Good"));
+  matchTriLevel[1] = new QLabel(tr("Unsure"));
+  matchTriLevel[2] = new QLabel(tr("Bad"));
+
+  matchGoodEdit = new QLineEdit();
+    matchGoodEdit->setFixedWidth(24);
+    matchGoodEdit->setTextMargins(1,0,0,0);
+    matchGoodEdit->setValidator(validInt);
+
+  matchBadEdit = new QLineEdit();
+    matchBadEdit->setFixedWidth(24);
+    matchBadEdit->setTextMargins(1,0,0,0);
+    matchBadEdit->setValidator(validInt);
+
+  QGridLayout *matchTriStack = new QGridLayout();
+    matchTriStack->setContentsMargins(10,5,10,5);
+    matchTriStack->setHorizontalSpacing(10);
+    matchTriStack->setVerticalSpacing(5);
     for (j = 0; j < 3; j++)
-      { matchTri->addWidget(matchLev[j], 0,2*j,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
-        matchTri->addWidget(matchLevLabel[j], 0,2*j+1,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+      { matchTriStack->addWidget(matchTriBox[j], 0,2*j,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+        matchTriStack->addWidget(matchTriLevel[j], 0,2*j+1,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
       }
-    matchTri->addWidget(matchBot, 1,0, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
-    matchTri->addWidget(matchTop, 1,4, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
-    matchTri->setColumnStretch(6,1.);
+    matchTriStack->addWidget(matchGoodEdit, 1,0, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+    matchTriStack->addWidget(matchBadEdit, 1,4, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+    matchTriStack->setColumnStretch(6,1.);
 
-  QWidget *matchWidgetScale = new QWidget();
-    matchWidgetScale->setLayout(matchRamp);
+  for (j = 0; j < 3; j++)
+    { matchRampBox[j] = new QToolButton();
+        matchRampBox[j]->setIconSize(QSize(16,16));
+        matchRampBox[j]->setFixedSize(20,20);
+        matchRampBox[j]->setIcon(QIcon(QPixmap(16,16)));
+    }
 
-  QWidget *matchWidgetTri = new QWidget();
-    matchWidgetTri->setLayout(matchTri);
+  matchRampLevel[0] = new QLabel(tr("Zero"));
+  matchRampLevel[1] = new QLabel(tr("Mid"));
+  matchRampLevel[2] = new QLabel(tr("Max"));
+
+  matchMidEdit = new QLineEdit();
+    matchMidEdit->setFixedWidth(24);
+    matchMidEdit->setTextMargins(1,0,0,0);
+    matchMidEdit->setValidator(validInt);
+
+  matchMaxEdit = new QLineEdit();
+    matchMaxEdit->setFixedWidth(24);
+    matchMaxEdit->setTextMargins(1,0,0,0);
+    matchMaxEdit->setValidator(validInt);
+
+  QGridLayout *matchRampStack = new QGridLayout();
+    matchRampStack->setContentsMargins(10,5,10,5);
+    matchRampStack->setHorizontalSpacing(10);
+    matchRampStack->setVerticalSpacing(5);
+    for (j = 0; j < 3; j++)
+      { matchRampStack->addWidget(matchRampBox[j],0,2*j,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+        matchRampStack->addWidget(matchRampLevel[j],0,2*j+1,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+      }
+    matchRampStack->addWidget(matchMidEdit, 1,2, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+    matchRampStack->addWidget(matchMaxEdit, 1,4, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+    matchRampStack->setColumnStretch(6,1.);
+
+  QWidget *matchQualWidget = new QWidget();
+    matchQualWidget->setLayout(matchQualStack);
+
+  QWidget *matchTriWidget = new QWidget();
+    matchTriWidget->setLayout(matchTriStack);
+
+  QWidget *matchRampWidget = new QWidget();
+    matchRampWidget->setLayout(matchRampStack);
 
   matchStack = new QStackedLayout();
-    matchStack->addWidget(matchWidgetScale);
-    matchStack->addWidget(matchWidgetTri);
+    matchStack->addWidget(matchQualWidget);
+    matchStack->addWidget(matchTriWidget);
+    matchStack->addWidget(matchRampWidget);
 
   QVBoxLayout *matchLayout = new QVBoxLayout();
     matchLayout->setSpacing(0);
     matchLayout->addLayout(matchSelect);
-    matchLayout->addLayout(matchScale);
-    matchLayout->addLayout(matchTristate);
+    matchLayout->addLayout(matchQual);
+    matchLayout->addLayout(matchTri);
+    matchLayout->addSpacing(5);
+    matchLayout->addLayout(matchRamp);
     matchLayout->addLayout(matchStack);
 
   QWidget *matchPanel = new QWidget();
@@ -3481,13 +3622,13 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     viewButts->addWidget(delView);
 
   QPushButton *cancel = new QPushButton("Cancel");
-  QPushButton *open = new QPushButton("OK");
+  QPushButton *accept = new QPushButton("OK");
 
   QHBoxLayout *decision = new QHBoxLayout();
     decision->addStretch(1);
     decision->addWidget(cancel);
     decision->addSpacing(5);
-    decision->addWidget(open);
+    decision->addWidget(accept);
 
   QVBoxLayout *central = new QVBoxLayout();
     central->addWidget(tabs,1);
@@ -3497,6 +3638,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     central->addSpacing(15);
     central->addLayout(decision);
 
+  matchVis = true;
   qualPanel->setVisible(false);
   qualVis = false;
   nmasks  = 0;
@@ -3506,7 +3648,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     }
 
   setLayout(central);
-  open->setDefault(true);
+  accept->setDefault(true);
   setWindowTitle(tr("Display Palette"));
   setMinimumSize(PALETTE_MIN_WIDTH,PALETTE_MIN_HEIGHT);
   setModal(true);
@@ -3523,7 +3665,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
   connect(neutralBox,SIGNAL(pressed()),this,SLOT(neutralChange()));
   connect(compressBox,SIGNAL(pressed()),this,SLOT(compressChange()));
 
-  connect(open,SIGNAL(clicked()),this,SLOT(accept()));
+  connect(accept,SIGNAL(clicked()),this,SLOT(accept()));
   connect(cancel,SIGNAL(clicked()),this,SLOT(reject()));
 
   connect(addView,SIGNAL(clicked()),this,SLOT(addView()));
@@ -3543,9 +3685,11 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
 
   connect(matchCheck,SIGNAL(stateChanged(int)),this,SLOT(activateMatchQV(int)));
   for (j = 0; j < 10; j++)
-    connect(matchBox[j],SIGNAL(pressed()),this,SLOT(matchRampChange()));
+    connect(matchQualBox[j],SIGNAL(pressed()),this,SLOT(matchQualChange()));
   for (j = 0; j < 3; j++)
-    connect(matchLev[j],SIGNAL(pressed()),this,SLOT(matchTriChange()));
+    connect(matchTriBox[j],SIGNAL(pressed()),this,SLOT(matchTriChange()));
+  for (j = 0; j < 3; j++)
+    connect(matchRampBox[j],SIGNAL(pressed()),this,SLOT(matchRampChange()));
 
   connect(qualCheck,SIGNAL(stateChanged(int)),this,SLOT(activateQualQV(int)));
   for (j = 0; j < 10; j++)
@@ -3559,13 +3703,15 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     }
 
   connect(matchOpt,SIGNAL(buttonClicked(int)),matchStack,SLOT(setCurrentIndex(int)));
-  connect(matchOpt,SIGNAL(buttonClicked(int)),matchStack,SLOT(setCurrentIndex(int)));
-  connect(matchBot,SIGNAL(editingFinished()),this,SLOT(matchGoodCheck()));
-  connect(matchTop,SIGNAL(editingFinished()),this,SLOT(matchBadCheck()));
-  matchRadioScale->setChecked(true);
+  connect(matchQualBoxes,SIGNAL(currentIndexChanged(int)),this,SLOT(matchBoxChange(int)));
+  connect(matchGoodEdit,SIGNAL(editingFinished()),this,SLOT(matchGoodCheck()));
+  connect(matchBadEdit,SIGNAL(editingFinished()),this,SLOT(matchBadCheck()));
+  connect(matchMidEdit,SIGNAL(editingFinished()),this,SLOT(matchMidCheck()));
+  connect(matchMaxEdit,SIGNAL(editingFinished()),this,SLOT(matchMaxCheck()));
+  connect(matchStrideEdit,SIGNAL(editingFinished()),this,SLOT(matchStrideCheck()));
+  matchRampRadio->setChecked(true);
 
   connect(qualOpt,SIGNAL(buttonClicked(int)),qualStack,SLOT(setCurrentIndex(int)));
-
   connect(qualBot,SIGNAL(editingFinished()),this,SLOT(qualGoodCheck()));
   connect(qualTop,SIGNAL(editingFinished()),this,SLOT(qualBadCheck()));
   connect(qualonB,SIGNAL(stateChanged(int)),this,SLOT(enforceMatchOff(int)));
@@ -3577,8 +3723,9 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
   static QColor white = QColor(255,255,255);
 
   Palette_State state;
-  QRgb matchRGB[10];
+  QRgb matchQual[10];
   QRgb matchTri[3];
+  QRgb matchRamp[3];
   QRgb qualRGB[10];
   QRgb qualTri[3];
   QRgb profRGB[10];
@@ -3597,20 +3744,24 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
     QRgb neutralRGB   = settings.value("neutral",QColor(255,255,255).rgb()).toUInt();
     QRgb compressRGB  = settings.value("compress",QColor(255,125,125).rgb()).toUInt();
 
-    matchRGB[0] = settings.value("match0",QColor(221,221,221).rgb()).toUInt();
-    matchRGB[1] = settings.value("match1",QColor(221,221,221).rgb()).toUInt();
-    matchRGB[2] = settings.value("match2",QColor(221,221,221).rgb()).toUInt();
-    matchRGB[3] = settings.value("match3",QColor(221,221,221).rgb()).toUInt();
-    matchRGB[4] = settings.value("match4",QColor(221,221,221).rgb()).toUInt();
-    matchRGB[5] = settings.value("match5",QColor(255,221,0).rgb()).toUInt();
-    matchRGB[6] = settings.value("match6",QColor(255,170,68).rgb()).toUInt();
-    matchRGB[7] = settings.value("match7",QColor(255,68,68).rgb()).toUInt();
-    matchRGB[8] = settings.value("match8",QColor(204,68,221).rgb()).toUInt();
-    matchRGB[9] = settings.value("match9",QColor(204,68,221).rgb()).toUInt();
+    matchQual[0] = settings.value("match0",QColor(221,221,221).rgb()).toUInt();
+    matchQual[1] = settings.value("match1",QColor(221,221,221).rgb()).toUInt();
+    matchQual[2] = settings.value("match2",QColor(221,221,221).rgb()).toUInt();
+    matchQual[3] = settings.value("match3",QColor(221,221,221).rgb()).toUInt();
+    matchQual[4] = settings.value("match4",QColor(221,221,221).rgb()).toUInt();
+    matchQual[5] = settings.value("match5",QColor(255,221,0).rgb()).toUInt();
+    matchQual[6] = settings.value("match6",QColor(255,170,68).rgb()).toUInt();
+    matchQual[7] = settings.value("match7",QColor(255,68,68).rgb()).toUInt();
+    matchQual[8] = settings.value("match8",QColor(204,68,221).rgb()).toUInt();
+    matchQual[9] = settings.value("match9",QColor(204,68,221).rgb()).toUInt();
 
-    matchTri[0] = settings.value("matchLow",QColor(100,255,100).rgb()).toUInt();
-    matchTri[1] = settings.value("matchMid",QColor(255,255,100).rgb()).toUInt();
-    matchTri[2] = settings.value("matchHgh",QColor(255,100,100).rgb()).toUInt();
+    matchTri[0] = settings.value("matchT0",QColor(100,255,100).rgb()).toUInt();
+    matchTri[1] = settings.value("matchT1",QColor(255,255,100).rgb()).toUInt();
+    matchTri[2] = settings.value("matchT2",QColor(255,100,100).rgb()).toUInt();
+
+    matchRamp[0] = settings.value("matchR0",QColor(255,255,255).rgb()).toUInt();
+    matchRamp[1] = settings.value("matchR1",QColor(255,0,0).rgb()).toUInt();
+    matchRamp[2] = settings.value("matchR2",QColor(0,0,255).rgb()).toUInt();
 
     qualRGB[0] = settings.value("qual0",QColor(221,221,221).rgb()).toUInt();
     qualRGB[1] = settings.value("qual1",QColor(221,221,221).rgb()).toUInt();
@@ -3649,6 +3800,10 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
     state.matchMode   = settings.value("matchMode",0).toInt();
     state.matchGood   = settings.value("matchGood",23).toInt();
     state.matchBad    = settings.value("matchBad",27).toInt();
+    state.matchMid    = settings.value("matchMid",20).toInt();
+    state.matchMax    = settings.value("matchMax",35).toInt();
+    state.matchStride = settings.value("matchStride",5).toInt();
+    state.matchBoxes  = settings.value("matchBoxes",10).toInt();
 
     state.qualqv     = settings.value("qualQV",false).toBool();
     state.qualMode   = settings.value("qualMode",0).toInt();
@@ -3668,9 +3823,11 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
   state.neutralColor.setRgb(neutralRGB);
   state.compressColor.setRgb(compressRGB);
   for (j = 0; j < 10; j++)
-    state.matchColor[j].setRgb(matchRGB[j]);
+    state.matchQualColor[j].setRgb(matchQual[j]);
   for (j = 0; j < 3; j++)
-    state.matchHue[j].setRgb(matchTri[j]);
+    state.matchTriColor[j].setRgb(matchTri[j]);
+  for (j = 0; j < 3; j++)
+    state.matchRampColor[j].setRgb(matchRamp[j]);
   for (j = 0; j < 10; j++)
     state.qualColor[j].setRgb(qualRGB[j]);
   for (j = 0; j < 3; j++)
@@ -3683,8 +3840,8 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
   else
     state.drawElim = 0;
 
-  state.matchVis = matchCheck->isEnabled();
-  state.qualVis = qualVis;
+  state.matchVis = matchVis;
+  state.qualVis  = qualVis;
 
   for (j = 0; j < nmasks; j++)
     { char *s = track[j]->name;
@@ -3735,13 +3892,18 @@ void PaletteDialog::writeSettings(QSettings &settings)
 
     settings.setValue("matchQV", matchCheck->isChecked());
     for (j = 0; j < 10; j++)
-      settings.setValue(tr("match%1").arg(j),matchColor[j].rgb());
-    settings.setValue(tr("matchLow"),matchHue[0].rgb());
-    settings.setValue(tr("matchMid"),matchHue[1].rgb());
-    settings.setValue(tr("matchHgh"),matchHue[2].rgb());
-    settings.setValue("matchMode", matchRadioTri->isChecked());
+      settings.setValue(tr("match%1").arg(j),matchQualColor[j].rgb());
+    for (j = 0; j < 3; j++)
+      settings.setValue(tr("matchT%1").arg(j),matchTriColor[j].rgb());
+    for (j = 0; j < 3; j++)
+      settings.setValue(tr("matchR%1").arg(j),matchRampColor[j].rgb());
+    settings.setValue("matchMode", matchTriRadio->isChecked());
     settings.setValue("matchGood", matchGood);
     settings.setValue("matchBad", matchBad);
+    settings.setValue("matchMid", matchMid);
+    settings.setValue("matchMax", matchMax);
+    settings.setValue("matchStride", matchStride);
+    settings.setValue("matchBoxes", matchQualBoxes->currentIndex());
 
     settings.setValue("qualQV", qualCheck->isChecked());
     for (j = 0; j < 10; j++)
@@ -3819,15 +3981,19 @@ bool PaletteDialog::readView(Palette_State &state, QString &view)
     state.matchqv   = settings.value("matchQV").toBool();
     state.matchMode = settings.value("matchMode").toInt();
     for (j = 0; j < 10; j++)
-      state.matchColor[j].setRgb(settings.value(tr("match%1").arg(j)).toUInt());
-    state.matchHue[0].setRgb(settings.value("matchLow").toUInt());
-    state.matchHue[1].setRgb(settings.value("matchMid").toUInt());
-    state.matchHue[2].setRgb(settings.value("matchHgh").toUInt());
-    state.matchGood = settings.value("matchGood").toInt();
-    state.matchBad  = settings.value("matchBad").toInt();
+      state.matchQualColor[j].setRgb(settings.value(tr("match%1").arg(j)).toUInt());
+    for (j = 0; j < 3; j++)
+      state.matchTriColor[j].setRgb(settings.value(tr("matchT%1").arg(j)).toUInt());
+    for (j = 0; j < 3; j++)
+      state.matchRampColor[j].setRgb(settings.value(tr("matchR%1").arg(j)).toUInt());
+    state.matchGood   = settings.value("matchGood").toInt();
+    state.matchBad    = settings.value("matchBad").toInt();
+    state.matchMid    = settings.value("matchMid").toInt();
+    state.matchMax    = settings.value("matchMax").toInt();
+    state.matchStride = settings.value("matchStride").toInt();
+    state.matchBoxes  = settings.value("matchBoxes").toInt();
 
-    state.qualVis  = settings.value("qualVis").toBool();
-    if (state.qualVis)
+    if (settings.value("qualVis").toBool())
       { state.qualqv   = settings.value("qualQV").toBool();
         state.qualMode = settings.value("qualMode").toInt();
         for (j = 0; j < 10; j++)
@@ -3930,12 +4096,17 @@ void PaletteDialog::writeView(Palette_State &state, QString &view)
     settings.setValue("matchQV",state.matchqv);
     settings.setValue("matchMode",state.matchMode);
     for (j = 0; j < 10; j++)
-      settings.setValue(tr("match%1").arg(j),state.matchColor[j].rgb());
-    settings.setValue(tr("matchLow"),state.matchHue[0].rgb());
-    settings.setValue(tr("matchMid"),state.matchHue[1].rgb());
-    settings.setValue(tr("matchHgh"),state.matchHue[2].rgb());
+      settings.setValue(tr("match%1").arg(j),state.matchQualColor[j].rgb());
+    for (j = 0; j < 3; j++)
+      settings.setValue(tr("matchT%1").arg(j),state.matchTriColor[j].rgb());
+    for (j = 0; j < 3; j++)
+      settings.setValue(tr("matchR%1").arg(j),state.matchRampColor[j].rgb());
     settings.setValue("matchGood",state.matchGood);
     settings.setValue("matchBad",state.matchBad);
+    settings.setValue("matchMid",state.matchMid);
+    settings.setValue("matchMax",state.matchMax);
+    settings.setValue("matchStride",state.matchStride);
+    settings.setValue("matchBoxes",state.matchBoxes);
 
     settings.setValue("qualVis",state.qualVis);
     settings.setValue("qualQV",state.qualqv);
@@ -4909,7 +5080,7 @@ int PaletteDialog::loadTracks(Palette_State &state, DataModel *model)
         }
     state.nmasks  = j;
     state.matchVis = (model->tspace != 0);
-    state.qualVis = (model->qvs != NULL);
+    state.qualVis  = (model->qvs != NULL);
   settings.endGroup();
 
   return (cnt);
@@ -4968,8 +5139,6 @@ void MainWindow::openFiles()
           MainWindow::warning(tr(mesg+10),this,MainWindow::ERROR,tr("OK"));
         }
     }
-  // else
-    // openDialog->putState(state);
 }
 
 void MainWindow::openPalette()
@@ -4997,8 +5166,6 @@ void MainWindow::openPalette()
           frames[i]->paletteDialog->putState(palette);
         }
     }
-  // else
-    // paletteDialog->putState(state);
 }
 
 void MainWindow::openCopy()
@@ -5314,7 +5481,16 @@ void MainWindow::readAndApplySettings()
   this->show();
 
   openDialog->readAndApplySettings(settings);
-  paletteDialog->readAndApplySettings(settings);
+  if (cview > 0)
+    { Palette_State state;
+      QString name;
+
+      name = views[cview-2];
+      if (paletteDialog->readView(state,name))
+        paletteDialog->putState(state);
+    }
+  else
+    paletteDialog->readAndApplySettings(settings);
 }
 
 void MainWindow::writeSettings()

@@ -196,10 +196,15 @@ typedef struct
     bool   matchVis;
     bool   matchqv;
     int    matchMode;
-    QColor matchColor[10];
-    QColor matchHue[3];
+    int    matchBoxes;          // x
+    QColor matchQualColor[10];
+    int    matchStride;         // x
+    QColor matchTriColor[3];
     int    matchGood;
     int    matchBad;
+    QColor matchRampColor[3];   // x
+    int    matchMid;            // x
+    int    matchMax;            // x
 
     bool   qualVis;
     bool   qualqv;
@@ -271,8 +276,9 @@ private slots:
   void stretchChange();
   void neutralChange();
   void compressChange();
-  void matchRampChange();
+  void matchQualChange();
   void matchTriChange();
+  void matchRampChange();
   void qualRampChange();
   void qualTriChange();
   void trackChange();
@@ -281,6 +287,9 @@ private slots:
   void compressCheck();
   void matchGoodCheck();
   void matchBadCheck();
+  void matchMidCheck();
+  void matchMaxCheck();
+  void matchStrideCheck();
   void qualGoodCheck();
   void qualBadCheck();
 
@@ -296,6 +305,8 @@ private slots:
   void activateQualQV(int);
   void enforceMatchOff(int);
   void activateTracks(int);
+
+  void matchBoxChange(int);
 
   void addView();
   void updateView();
@@ -348,21 +359,42 @@ private:
     int          compressMax;
 
   QCheckBox *matchCheck;
+  bool       matchVis;
     QLabel         *matchLabel;
-    QLabel         *matchLabelScale;
-    QRadioButton   *matchRadioScale;
-    QLabel         *matchLabelTri;
-    QRadioButton   *matchRadioTri;
+    QLabel         *matchQualLabel;  // matchLabelScale;
+    QRadioButton   *matchQualRadio;  // matchRadioScale;
+      QHBoxLayout  *matchQualStack;  // x
+      QLabel       *matchBoxLabel;   // x
+      QComboBox    *matchQualBoxes;  // x
+      int           matchBoxes;      // x
+    QLabel         *matchTriLabel;   // matchLabelTri;
+    QRadioButton   *matchTriRadio;   // matchRadioTri;
+    QLabel         *matchRampLabel;  // x
+    QRadioButton   *matchRampRadio;  // x
+
     QStackedLayout *matchStack;
-    QToolButton    *matchBox[10];
-    QColor          matchColor[10];
-    QToolButton    *matchLev[3];
-    QColor          matchHue[3];
-    QLabel         *matchLevLabel[3];
-    QLineEdit      *matchBot;
-    QLineEdit      *matchTop;
-    int             matchGood;
-    int             matchBad;
+
+      QToolButton    *matchQualBox[10];    // matchBox
+      QColor          matchQualColor[10];  // matchColor
+      QLabel         *matchStrideLabel;    // x
+      QLineEdit      *matchStrideEdit;     // x
+      int             matchStride;         // x
+
+      QToolButton    *matchTriBox[3];       // matchLev
+      QColor          matchTriColor[3];     // MatchHue
+      QLabel         *matchTriLevel[3];     // matchLevLabel
+      QLineEdit      *matchGoodEdit;        // matchBot
+      QLineEdit      *matchBadEdit;         // matchTop
+      int             matchGood;
+      int             matchBad;
+
+      QToolButton    *matchRampBox[3];    // x
+      QColor          matchRampColor[3];  // x
+      QLabel         *matchRampLevel[3];  // x
+      QLineEdit      *matchMidEdit;       // x
+      QLineEdit      *matchMaxEdit;       // x
+      int             matchMid;           // x
+      int             matchMax;           // x
 
   QWidget *qualPanel;
   bool     qualVis;
@@ -372,17 +404,20 @@ private:
     QRadioButton   *qualRadioScale;
     QLabel         *qualLabelTri;
     QRadioButton   *qualRadioTri;
-    QStackedLayout *qualStack;
-    QToolButton    *qualBox[10];
-    QColor          qualColor[10];
-    QToolButton    *qualLev[3];
-    QColor          qualHue[3];
-    QLabel         *qualLevLabel[3];
-    QLineEdit      *qualBot;
-    QLineEdit      *qualTop;
-    int             qualGood;
-    int             qualBad;
     QCheckBox      *qualonB;
+
+    QStackedLayout *qualStack;
+
+      QToolButton    *qualBox[10];
+      QColor          qualColor[10];
+
+      QToolButton    *qualLev[3];
+      QColor          qualHue[3];
+      QLabel         *qualLevLabel[3];
+      QLineEdit      *qualBot;
+      QLineEdit      *qualTop;
+      int             qualGood;
+      int             qualBad;
 
   TrackWidget *maskPanel;
   int          nmasks;
