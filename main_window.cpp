@@ -1143,14 +1143,14 @@ void MyCanvas::paintEvent(QPaintEvent *event)
               { for (j = 0; j < 10; j++)
                   { qPen[j].setWidth(2);
                     qPen[j].setCapStyle(Qt::FlatCap);
-                    qPen[j].setColor(palette->qualColor[j]);
+                    qPen[j].setColor(palette->qualQualColor[j]);
                   }
               }
             else
               for (j = 0; j < 3; j++)
                 { qPen[j].setWidth(2);
                   qPen[j].setCapStyle(Qt::FlatCap);
-                  qPen[j].setColor(palette->qualHue[j]);
+                  qPen[j].setColor(palette->qualTriColor[j]);
                 }
           }
 
@@ -2262,7 +2262,7 @@ void PaletteDialog::routine()				\
 							\
   color = newColor;					\
   QPixmap blob = QPixmap(16,16);			\
-    blob.fill(color);					\
+    blob.fill(newColor);				\
   box->setIcon(QIcon(blob));				\
 }
 
@@ -2277,96 +2277,56 @@ COLOR_CHANGE(stretchChange,stretchColor,stretchBox)
 COLOR_CHANGE(neutralChange,neutralColor,neutralBox)
 COLOR_CHANGE(compressChange,compressColor,compressBox)
 
-void PaletteDialog::matchQualChange()
-{ int j;
-  for (j = 0; j < 10; j++)
-    if (matchQualBox[j]->isDown())
-      break;
-  QColor newColor = QColorDialog::getColor(matchQualColor[j],this);
-  matchQualBox[j]->setDown(false);
-  if ( ! newColor.isValid()) return;
-
-  matchQualColor[j] = newColor;
-  QPixmap blob = QPixmap(16,16);
-    blob.fill(newColor);
-  matchQualBox[j]->setIcon(QIcon(blob));
+#define COLOR_ARRAY_CHANGE(routine,color,box) 			\
+								\
+void PaletteDialog::routine()					\
+{ int j;							\
+  for (j = 0; j < 10; j++)					\
+    if (box[j]->isDown())					\
+      break;							\
+  QColor newColor = QColorDialog::getColor(color[j],this);	\
+  box[j]->setDown(false);					\
+  if ( ! newColor.isValid()) return;				\
+								\
+  color[j] = newColor;						\
+  QPixmap blob = QPixmap(16,16);				\
+    blob.fill(newColor);					\
+  box[j]->setIcon(QIcon(blob));					\
 }
 
-void PaletteDialog::matchTriChange()
-{ int j;
-  for (j = 0; j < 3; j++)
-    if (matchTriBox[j]->isDown())
-      break;
-  QColor newColor = QColorDialog::getColor(matchTriColor[j],this);
-  matchTriBox[j]->setDown(false);
-  if ( ! newColor.isValid()) return;
+COLOR_ARRAY_CHANGE(matchQualChange,matchQualColor,matchQualBox)
+COLOR_ARRAY_CHANGE(matchTriChange,matchTriColor,matchTriBox)
+COLOR_ARRAY_CHANGE(matchRampChange,matchRampColor,matchRampBox)
 
-  matchTriColor[j] = newColor;
-  QPixmap blob = QPixmap(16,16);
-    blob.fill(newColor);
-  matchTriBox[j]->setIcon(QIcon(blob));
+COLOR_ARRAY_CHANGE(qualQualChange,qualQualColor,qualQualBox)
+COLOR_ARRAY_CHANGE(qualTriChange,qualTriColor,qualTriBox)
+COLOR_ARRAY_CHANGE(qualRampChange,qualRampColor,qualRampBox)
+
+COLOR_ARRAY_CHANGE(trackChange,trackColor,trackBox)
+
+#define EDIT_CHECK(routine,edit,var)	\
+					\
+void PaletteDialog::routine()		\
+{ if (edit->text().isEmpty())		\
+    var = -1;				\
+  else					\
+    var = edit->text().toInt();		\
 }
 
-void PaletteDialog::matchRampChange()
-{ int j;
-  for (j = 0; j < 3; j++)
-    if (matchRampBox[j]->isDown())
-      break;
-  QColor newColor = QColorDialog::getColor(matchRampColor[j],this);
-  matchRampBox[j]->setDown(false);
-  if ( ! newColor.isValid()) return;
+EDIT_CHECK(compressCheck,maxCompress,compressMax)
+EDIT_CHECK(stretchCheck,maxStretch,stretchMax)
 
-  matchRampColor[j] = newColor;
-  QPixmap blob = QPixmap(16,16);
-    blob.fill(newColor);
-  matchRampBox[j]->setIcon(QIcon(blob));
-}
+EDIT_CHECK(qualGoodCheck,qualGoodEdit,qualGood)
+EDIT_CHECK(qualBadCheck,qualBadEdit,qualBad)
+EDIT_CHECK(qualMidCheck,qualMidEdit,qualMid)
+EDIT_CHECK(qualMaxCheck,qualMaxEdit,qualMax)
+EDIT_CHECK(qualStrideCheck,qualStrideEdit,qualStride)
 
-void PaletteDialog::qualRampChange()
-{ int j;
-  for (j = 0; j < 10; j++)
-    if (qualBox[j]->isDown())
-      break;
-  QColor newColor = QColorDialog::getColor(qualColor[j],this);
-  qualBox[j]->setDown(false);
-  if ( ! newColor.isValid()) return;
-
-  qualColor[j] = newColor;
-  QPixmap blob = QPixmap(16,16);
-    blob.fill(newColor);
-  qualBox[j]->setIcon(QIcon(blob));
-}
-
-void PaletteDialog::qualTriChange()
-{ int j;
-  for (j = 0; j < 3; j++)
-    if (qualLev[j]->isDown())
-      break;
-  QColor newColor = QColorDialog::getColor(qualHue[j],this);
-  qualLev[j]->setDown(false);
-  if ( ! newColor.isValid()) return;
-
-  qualHue[j] = newColor;
-  QPixmap blob = QPixmap(16,16);
-    blob.fill(newColor);
-  qualLev[j]->setIcon(QIcon(blob));
-}
-
-void PaletteDialog::trackChange()
-{ int j;
-
-  for (j = 0; j < nmasks; j++)
-    if (trackBox[j]->isDown())
-      break;
-  QColor newColor = QColorDialog::getColor(trackColor[j],this);
-  trackBox[j]->setDown(false);
-  if ( ! newColor.isValid()) return;
-
-  trackColor[j] = newColor;
-  QPixmap blob = QPixmap(16,16);
-    blob.fill(newColor);
-  trackBox[j]->setIcon(QIcon(blob));
-}
+EDIT_CHECK(matchGoodCheck,matchGoodEdit,matchGood)
+EDIT_CHECK(matchBadCheck,matchBadEdit,matchBad)
+EDIT_CHECK(matchMidCheck,matchMidEdit,matchMid)
+EDIT_CHECK(matchMaxCheck,matchMaxEdit,matchMax)
+EDIT_CHECK(matchStrideCheck,matchStrideEdit,matchStride)
 
 void PaletteDialog::activateGrid(int state)
 { bool on;
@@ -2415,9 +2375,7 @@ void PaletteDialog::activateMatchQV(int state)
   for (j = 0; j < 3; j++)
     { matchTriBox[j]->setEnabled(on);
       matchTriLevel[j]->setEnabled(on);
-    }
-  for (j = 0; j < 3; j++)
-    { matchRampBox[j]->setEnabled(on);
+      matchRampBox[j]->setEnabled(on);
       matchRampLevel[j]->setEnabled(on);
     }
   if (on)
@@ -2452,25 +2410,41 @@ void PaletteDialog::activateQualQV(int state)
 
   qualLabel->setEnabled(on);
   qualonB->setEnabled(on);
-  qualLabelScale->setEnabled(on);
-  qualRadioScale->setEnabled(on);
-  qualLabelTri->setEnabled(on);
-  qualRadioTri->setEnabled(on);
+  qualQualLabel->setEnabled(on);
+  qualQualRadio->setEnabled(on);
+  qualBoxLabel->setEnabled(on);
+  qualQualBoxes->setEnabled(on);
+  qualStrideLabel->setEnabled(on);
+  qualTriLabel->setEnabled(on);
+  qualTriRadio->setEnabled(on);
+  qualRampLabel->setEnabled(on);
+  qualRampRadio->setEnabled(on);
   for (j = 0; j < 10; j++)
-    qualBox[j]->setEnabled(on);
+    qualQualBox[j]->setEnabled(on);
   for (j = 0; j < 3; j++)
-    { qualLev[j]->setEnabled(on);
-      qualLevLabel[j]->setEnabled(on);
+    { qualTriBox[j]->setEnabled(on);
+      qualTriLevel[j]->setEnabled(on);
+      qualRampBox[j]->setEnabled(on);
+      qualRampLevel[j]->setEnabled(on);
     }
   if (on)
-    { qualBot->setText(tr("%1").arg(qualGood));
-      qualTop->setText(tr("%1").arg(qualBad));
+    { qualStrideEdit->setText(tr("%1").arg(qualStride));
+      qualGoodEdit->setText(tr("%1").arg(qualGood));
+      qualBadEdit->setText(tr("%1").arg(qualBad));
+      qualMidEdit->setText(tr("%1").arg(qualMid));
+      qualMaxEdit->setText(tr("%1").arg(qualMax));
     }
   else
-    { qualBot->setText(tr(""));
-      qualTop->setText(tr(""));
-      qualBot->clearFocus();
-      qualTop->clearFocus();
+    { qualStrideEdit->setText(tr(""));
+      qualGoodEdit->setText(tr(""));
+      qualBadEdit->setText(tr(""));
+      qualMidEdit->setText(tr(""));
+      qualMaxEdit->setText(tr(""));
+      qualStrideEdit->clearFocus();
+      qualGoodEdit->clearFocus();
+      qualBadEdit->clearFocus();
+      qualMidEdit->clearFocus();
+      qualMaxEdit->clearFocus();
     }
 }
 
@@ -2548,24 +2522,6 @@ int PaletteDialog::liveCount()
   return (cnt);
 }
 
-int PaletteDialog::getView()
-{ int j;
-
-  MainWindow::views.clear();
-  for (j = 2; j < viewList->count(); j++)
-    MainWindow::views.append(viewList->itemText(j));
-  MainWindow::cview = viewList->currentIndex();
-  return (MainWindow::cview);
-}
-
-void PaletteDialog::setView()
-{ viewList->clear();
-  viewList->addItem(tr("Preferences"));
-  viewList->insertSeparator(1);
-  viewList->addItems(MainWindow::views);
-  viewList->setCurrentIndex(MainWindow::cview);
-}
-
 void PaletteDialog::getState(Palette_State &state)
 { static QColor black = QColor(0,0,0);
   static QColor white = QColor(255,255,255);
@@ -2621,14 +2577,23 @@ void PaletteDialog::getState(Palette_State &state)
 
   state.qualVis       = qualVis;
   state.qualqv        = qualCheck->isChecked();
-  state.qualMode      = qualRadioTri->isChecked();
+  if (qualRampRadio->isChecked())
+    state.qualMode = 2;
+  else
+    state.qualMode = qualTriRadio->isChecked();
+  state.qualonB       = qualonB->isChecked();
   for (j = 0; j < 10; j++)
-    state.qualColor[j] = qualColor[j];
+    state.qualQualColor[j] = qualQualColor[j];
   for (j = 0; j < 3; j++)
-    state.qualHue[j] = qualHue[j];
+    state.qualTriColor[j] = qualTriColor[j];
+  for (j = 0; j < 3; j++)
+    state.qualRampColor[j] = qualRampColor[j];
   state.qualGood      = qualGood;
   state.qualBad       = qualBad;
-  state.qualonB       = qualonB->isChecked();
+  state.qualMid       = qualMid;
+  state.qualMax       = qualMax;
+  state.qualStride    = qualStride;
+  state.qualBoxes     = qualBoxes;
 
   //  Determine order of masks in layout
 
@@ -2668,13 +2633,18 @@ void PaletteDialog::putState(Palette_State &state)
   compressColor = state.compressColor;
   compressMax   = state.compressMax;
   stretchMax    = state.stretchMax;
+
+  qualGood      = state.qualGood;
+  qualBad       = state.qualBad;
+  qualMid       = state.qualMid;
+  qualMax       = state.qualMax;
+  qualStride    = state.qualStride;
+
   matchGood     = state.matchGood;
   matchBad      = state.matchBad;
   matchMid      = state.matchMid;
   matchMax      = state.matchMax;
   matchStride   = state.matchStride;
-  qualGood      = state.qualGood;
-  qualBad       = state.qualBad;
 
   for (j = 0; j < 10; j++)
     matchQualColor[j] = state.matchQualColor[j];
@@ -2683,9 +2653,11 @@ void PaletteDialog::putState(Palette_State &state)
   for (j = 0; j < 3; j++)
     matchRampColor[j] = state.matchRampColor[j];
   for (j = 0; j < 10; j++)
-    qualColor[j] = state.qualColor[j];
+    qualQualColor[j] = state.qualQualColor[j];
   for (j = 0; j < 3; j++)
-    qualHue[j] = state.qualHue[j];
+    qualTriColor[j] = state.qualTriColor[j];
+  for (j = 0; j < 3; j++)
+    qualRampColor[j] = state.qualRampColor[j];
 
   blob.fill(backColor);
   backBox->setIcon(QIcon(blob));
@@ -2730,12 +2702,16 @@ void PaletteDialog::putState(Palette_State &state)
       matchRampBox[j]->setIcon(QIcon(blob));
     }
   for (j = 0; j < 10; j++)
-    { blob.fill(qualColor[j]);
-      qualBox[j]->setIcon(QIcon(blob));
+    { blob.fill(qualQualColor[j]);
+      qualQualBox[j]->setIcon(QIcon(blob));
     }
   for (j = 0; j < 3; j++)
-    { blob.fill(qualHue[j]);
-      qualLev[j]->setIcon(QIcon(blob));
+    { blob.fill(qualTriColor[j]);
+      qualTriBox[j]->setIcon(QIcon(blob));
+    }
+  for (j = 0; j < 3; j++)
+    { blob.fill(qualRampColor[j]);
+      qualRampBox[j]->setIcon(QIcon(blob));
     }
 
   gridCheck->setChecked(state.showGrid);
@@ -2755,9 +2731,16 @@ void PaletteDialog::putState(Palette_State &state)
   matchQualBoxes->setCurrentIndex(state.matchBoxes-2);
 
   if (qualGood >= 0)
-    qualBot->setText(tr("%1").arg(qualGood));
+    qualGoodEdit->setText(tr("%1").arg(qualGood));
   if (qualBad >= 0)
-    qualTop->setText(tr("%1").arg(qualBad));
+    qualBadEdit->setText(tr("%1").arg(qualBad));
+  if (qualMid >= 0)
+    qualMidEdit->setText(tr("%1").arg(qualMid));
+  if (qualMax >= 0)
+    qualMaxEdit->setText(tr("%1").arg(qualMax));
+  if (qualStride >= 0)
+    qualStrideEdit->setText(tr("%1").arg(qualStride));
+  qualQualBoxes->setCurrentIndex(state.qualBoxes-2);
 
   if (compressMax >= 0)
     maxCompress->setText(tr("%1").arg(compressMax));
@@ -2782,12 +2765,16 @@ void PaletteDialog::putState(Palette_State &state)
       matchStack->setCurrentIndex(2);
     }
   if (state.qualMode == 0)
-    { qualRadioScale->setChecked(true);
+    { qualQualRadio->setChecked(true);
       qualStack->setCurrentIndex(0);
     }
-  else
-    { qualRadioTri->setChecked(true);
+  else if (state.qualMode == 1)
+    { qualTriRadio->setChecked(true);
       qualStack->setCurrentIndex(1);
+    }
+  else
+    { qualRampRadio->setChecked(true);
+      qualStack->setCurrentIndex(2);
     }
 
   matchVis = state.matchVis;
@@ -2827,67 +2814,22 @@ void PaletteDialog::putState(Palette_State &state)
   activateTracks(1);
 }
 
-void PaletteDialog::compressCheck()
-{ if (maxCompress->text().isEmpty())
-    compressMax = -1;
-  else
-    compressMax = maxCompress->text().toInt();
+int PaletteDialog::getView()
+{ int j;
+
+  MainWindow::views.clear();
+  for (j = 2; j < viewList->count(); j++)
+    MainWindow::views.append(viewList->itemText(j));
+  MainWindow::cview = viewList->currentIndex();
+  return (MainWindow::cview);
 }
 
-void PaletteDialog::stretchCheck()
-{ if (maxStretch->text().isEmpty())
-    stretchMax = -1;
-  else
-    stretchMax = maxStretch->text().toInt();
-}
-
-void PaletteDialog::qualGoodCheck()
-{ if (qualBot->text().isEmpty())
-    qualGood = -1;
-  else
-    qualGood = qualBot->text().toInt();
-}
-
-void PaletteDialog::qualBadCheck()
-{ if (qualTop->text().isEmpty())
-    qualBad = -1;
-  else
-    qualBad = qualTop->text().toInt();
-}
-
-void PaletteDialog::matchGoodCheck()
-{ if (matchGoodEdit->text().isEmpty())
-    matchGood = -1;
-  else
-    matchGood = matchGoodEdit->text().toInt();
-}
-
-void PaletteDialog::matchBadCheck()
-{ if (matchBadEdit->text().isEmpty())
-    matchBad = -1;
-  else
-    matchBad = matchBadEdit->text().toInt();
-}
-
-void PaletteDialog::matchMidCheck()
-{ if (matchMidEdit->text().isEmpty())
-    matchMid = -1;
-  else
-    matchMid = matchMidEdit->text().toInt();
-}
-
-void PaletteDialog::matchMaxCheck()
-{ if (matchMaxEdit->text().isEmpty())
-    matchMax = -1;
-  else
-    matchMax = matchMaxEdit->text().toInt();
-}
-
-void PaletteDialog::matchStrideCheck()
-{ if (matchStrideEdit->text().isEmpty())
-    matchStride = -1;
-  else
-    matchStride = matchStrideEdit->text().toInt();
+void PaletteDialog::setView()
+{ viewList->clear();
+  viewList->addItem(tr("Preferences"));
+  viewList->insertSeparator(1);
+  viewList->addItems(MainWindow::views);
+  viewList->setCurrentIndex(MainWindow::cview);
 }
 
 void PaletteDialog::addView()
@@ -2973,6 +2915,25 @@ void PaletteDialog::matchBoxChange(int idx)
         }
     }
   matchBoxes = idx;
+}
+
+void PaletteDialog::qualBoxChange(int idx)
+{ int i;
+
+  idx += 2;
+  if (idx > qualBoxes)
+    { for (i = idx-1; i >= qualBoxes; i--)
+        { qualQualStack->insertWidget(qualBoxes,qualQualBox[i]);
+          qualQualBox[i]->setVisible(true);
+        }
+    }
+  else
+    { for (i = idx; i < qualBoxes; i++)
+        { qualQualStack->removeWidget(qualQualBox[i]);
+          qualQualBox[i]->setVisible(false);
+        }
+    }
+  qualBoxes = idx;
 }
 
 void PaletteDialog::symmetricDB(bool yes)
@@ -3239,7 +3200,7 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
 
   matchQualLabel = new QLabel(tr("Qualitative"));
   matchQualRadio = new QRadioButton();
-  matchQualBoxes   = new QComboBox();
+  matchQualBoxes = new QComboBox();
      matchQualBoxes->addItems(boxes);
   matchBoxLabel = new QLabel(tr("Boxes"));
 
@@ -3396,10 +3357,9 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
   QWidget *matchPanel = new QWidget();
     matchPanel->setLayout(matchLayout);
 
-  //  Consensus QV display, both ramp and tri-state
+  //  Consensus QV display: qualitative, ramp, and tri-state
 
   qualLabel = new QLabel(tr("Show qual qv's"));
-
   qualCheck = new QCheckBox();
     qualCheck->setFixedWidth(30);
 
@@ -3413,93 +3373,162 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
     qualSelect->addWidget(qualonB);
     qualSelect->addStretch(1);
 
-  qualLabelScale = new QLabel(tr("Ramp"));
-  qualRadioScale = new QRadioButton();
+  qualQualLabel = new QLabel(tr("Qualitative"));
+  qualQualRadio = new QRadioButton();
+  qualQualBoxes = new QComboBox();
+    qualQualBoxes->addItems(boxes);
+  qualBoxLabel  = new QLabel(tr("Boxes"));
 
-  QHBoxLayout *qualScale = new QHBoxLayout();
-    qualScale->addSpacing(40);
-    qualScale->addWidget(qualRadioScale);
-    qualScale->addSpacing(11);
-    qualScale->addWidget(qualLabelScale);
-    qualScale->addStretch(1);
+  QHBoxLayout *qualQual = new QHBoxLayout();
+    qualQual->addSpacing(40);
+    qualQual->addWidget(qualQualRadio);
+    qualQual->addSpacing(11);
+    qualQual->addWidget(qualQualLabel);
+    qualQual->addSpacing(15);
+    qualQual->addWidget(qualQualBoxes);
+    qualQual->addSpacing(5);
+    qualQual->addWidget(qualBoxLabel);
+    qualQual->addStretch(1);
 
-  qualLabelTri = new QLabel(tr("Tri-State"));
-  qualRadioTri = new QRadioButton();
+  qualTriLabel = new QLabel(tr("Tri-State"));
+  qualTriRadio = new QRadioButton();
 
-  QHBoxLayout *qualTristate = new QHBoxLayout();
-    qualTristate->addSpacing(40);
-    qualTristate->addWidget(qualRadioTri);
-    qualTristate->addSpacing(11);
-    qualTristate->addWidget(qualLabelTri);
-    qualTristate->addStretch(1);
+  QHBoxLayout *qualTri = new QHBoxLayout();
+    qualTri->addSpacing(40);
+    qualTri->addWidget(qualTriRadio);
+    qualTri->addSpacing(11);
+    qualTri->addWidget(qualTriLabel);
+    qualTri->addStretch(1);
 
-  QButtonGroup *qualOpt = new QButtonGroup(this);
-    qualOpt->addButton(qualRadioScale,0);
-    qualOpt->addButton(qualRadioTri,1);
-
-  for (j = 0; j < 10; j++)
-    { qualBox[j] = new QToolButton();
-        qualBox[j]->setIconSize(QSize(16,16));
-        qualBox[j]->setFixedSize(20,20);
-        qualBox[j]->setIcon(QIcon(QPixmap(16,16)));
-    }
+  qualRampLabel = new QLabel(tr("Ramp"));
+  qualRampRadio = new QRadioButton();
 
   QHBoxLayout *qualRamp = new QHBoxLayout();
-    qualRamp->setContentsMargins(10,5,10,5);
-    qualRamp->setSpacing(0);
-    for (j = 0; j < 10; j++)
-      qualRamp->addWidget(qualBox[j]);
+    qualRamp->addSpacing(40);
+    qualRamp->addWidget(qualRampRadio);
+    qualRamp->addSpacing(11);
+    qualRamp->addWidget(qualRampLabel);
     qualRamp->addStretch(1);
 
-  for (j = 0; j < 3; j++)
-    { qualLev[j] = new QToolButton();
-        qualLev[j]->setIconSize(QSize(16,16));
-        qualLev[j]->setFixedSize(20,20);
-        qualLev[j]->setIcon(QIcon(QPixmap(16,16)));
+  QButtonGroup *qualOpt = new QButtonGroup(this);
+    qualOpt->addButton(qualQualRadio,0);
+    qualOpt->addButton(qualTriRadio,1);
+    qualOpt->addButton(qualRampRadio,2);
+
+  for (j = 0; j < 10; j++)
+    { qualQualBox[j] = new QToolButton();
+      qualQualBox[j]->setIconSize(QSize(16,16));
+      qualQualBox[j]->setFixedSize(20,20);
+      qualQualBox[j]->setIcon(QIcon(QPixmap(16,16)));
     }
 
-  qualLevLabel[0] = new QLabel(tr("Good")); 
-  qualLevLabel[1] = new QLabel(tr("Unsure"));
-  qualLevLabel[2] = new QLabel(tr("Bad"));
+  qualStrideLabel = new QLabel(tr("Stride:"));
+  qualStrideEdit = new QLineEdit();
+    qualStrideEdit->setFixedWidth(22);
+    qualStrideEdit->setTextMargins(1,0,0,0);
+    qualStrideEdit->setValidator(validInt);
 
-  qualBot = new QLineEdit();
-    qualBot->setFixedWidth(24);
-    qualBot->setTextMargins(1,0,0,0);
-    qualBot->setValidator(validInt);
+  QHBoxLayout *qualQualStack = new QHBoxLayout();
+    qualQualStack->setContentsMargins(10,5,10,5);
+    qualQualStack->setSpacing(0);
+    for (j = 0; j < 10; j++)
+      qualQualStack->addWidget(qualQualBox[j]);
+    qualQualStack->addSpacing(10);
+    qualQualStack->addWidget(matchStrideLabel);
+    qualQualStack->addSpacing(2);
+    qualQualStack->addWidget(matchStrideEdit);
+    qualQualStack->addStretch(1);
+    qualQualStack->addStretch(1);
+  qualBoxes = 10;
 
-  qualTop = new QLineEdit();
-    qualTop->setFixedWidth(24);
-    qualTop->setTextMargins(1,0,0,0);
-    qualTop->setValidator(validInt);
+  for (j = 0; j < 3; j++)
+    { qualTriBox[j] = new QToolButton();
+        qualTriBox[j]->setIconSize(QSize(16,16));
+        qualTriBox[j]->setFixedSize(20,20);
+        qualTriBox[j]->setIcon(QIcon(QPixmap(16,16)));
+    }
 
-  QGridLayout *qualTri = new QGridLayout();
-    qualTri->setContentsMargins(10,5,10,5);
-    qualTri->setHorizontalSpacing(10);
-    qualTri->setVerticalSpacing(2);
+  qualTriLevel[0] = new QLabel(tr("Good")); 
+  qualTriLevel[1] = new QLabel(tr("Unsure"));
+  qualTriLevel[2] = new QLabel(tr("Bad"));
+
+  qualGoodEdit = new QLineEdit();
+    qualGoodEdit->setFixedWidth(24);
+    qualGoodEdit->setTextMargins(1,0,0,0);
+    qualGoodEdit->setValidator(validInt);
+
+  qualBadEdit = new QLineEdit();
+    qualBadEdit->setFixedWidth(24);
+    qualBadEdit->setTextMargins(1,0,0,0);
+    qualBadEdit->setValidator(validInt);
+
+  QGridLayout *qualTriStack = new QGridLayout();
+    qualTriStack->setContentsMargins(10,5,10,5);
+    qualTriStack->setHorizontalSpacing(10);
+    qualTriStack->setVerticalSpacing(2);
     for (j = 0; j < 3; j++)
-      { qualTri->addWidget(qualLev[j], 0,2*j,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
-        qualTri->addWidget(qualLevLabel[j], 0,2*j+1,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+      { qualTriStack->addWidget(qualTriBox[j], 0,2*j,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+        qualTriStack->addWidget(qualTriLevel[j], 0,2*j+1,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
       }
-    qualTri->addWidget(qualBot, 1,0, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
-    qualTri->addWidget(qualTop, 1,4, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
-    qualTri->setColumnStretch(6,1.);
+    qualTriStack->addWidget(qualGoodEdit, 1,0, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+    qualTriStack->addWidget(qualBadEdit, 1,4, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+    qualTriStack->setColumnStretch(6,1.);
+ 
+  for (j = 0; j < 3; j++)
+    { qualRampBox[j] = new QToolButton();
+        qualRampBox[j]->setIconSize(QSize(16,16));
+        qualRampBox[j]->setFixedSize(20,20);
+        qualRampBox[j]->setIcon(QIcon(QPixmap(16,16)));
+    }
 
-  QWidget *qualWidgetScale = new QWidget();
-    qualWidgetScale->setLayout(qualRamp);
+  qualRampLevel[0] = new QLabel(tr("Zero"));
+  qualRampLevel[1] = new QLabel(tr("Mid"));
+  qualRampLevel[2] = new QLabel(tr("Max"));
 
-  QWidget *qualWidgetTri = new QWidget();
-    qualWidgetTri->setLayout(qualTri);
+  qualMidEdit = new QLineEdit();
+    qualMidEdit->setFixedWidth(24);
+    qualMidEdit->setTextMargins(1,0,0,0);
+    qualMidEdit->setValidator(validInt);
+
+  qualMaxEdit = new QLineEdit();
+    qualMaxEdit->setFixedWidth(24);
+    qualMaxEdit->setTextMargins(1,0,0,0);
+    qualMaxEdit->setValidator(validInt);
+
+  QGridLayout *qualRampStack = new QGridLayout();
+    qualRampStack->setContentsMargins(10,5,10,5);
+    qualRampStack->setHorizontalSpacing(10);
+    qualRampStack->setVerticalSpacing(5);
+    for (j = 0; j < 3; j++)
+      { qualRampStack->addWidget(qualRampBox[j],0,2*j,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+        qualRampStack->addWidget(qualRampLevel[j],0,2*j+1,1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+      }
+    qualRampStack->addWidget(qualMidEdit, 1,2, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+    qualRampStack->addWidget(qualMaxEdit, 1,4, 1,1, Qt::AlignVCenter|Qt::AlignHCenter);
+    qualRampStack->setColumnStretch(6,1.);
+
+  QWidget *qualQualWidget = new QWidget();
+    qualQualWidget->setLayout(qualQualStack);
+
+  QWidget *qualTriWidget = new QWidget();
+    qualTriWidget->setLayout(qualTriStack);
+
+  QWidget *qualRampWidget = new QWidget();
+    qualRampWidget->setLayout(qualRampStack);
 
   qualStack = new QStackedLayout();
-    qualStack->addWidget(qualWidgetScale);
-    qualStack->addWidget(qualWidgetTri);
+    qualStack->addWidget(qualQualWidget);
+    qualStack->addWidget(qualTriWidget);
+    qualStack->addWidget(qualRampWidget);
 
   QVBoxLayout *qualLayout = new QVBoxLayout();
-    qualLayout->setContentsMargins(0,20,0,0);
+    // qualLayout->setContentsMargins(0,20,0,0);
     qualLayout->setSpacing(0);
     qualLayout->addLayout(qualSelect);
-    qualLayout->addLayout(qualScale);
-    qualLayout->addLayout(qualTristate);
+    qualLayout->addLayout(qualQual);
+    qualLayout->addLayout(qualTri);
+    qualLayout->addSpacing(5);
+    qualLayout->addLayout(qualRamp);
     qualLayout->addLayout(qualStack);
 
   qualPanel = new QWidget();
@@ -3693,9 +3722,11 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
 
   connect(qualCheck,SIGNAL(stateChanged(int)),this,SLOT(activateQualQV(int)));
   for (j = 0; j < 10; j++)
-    connect(qualBox[j],SIGNAL(pressed()),this,SLOT(qualRampChange()));
+    connect(qualQualBox[j],SIGNAL(pressed()),this,SLOT(qualQualChange()));
   for (j = 0; j < 3; j++)
-    connect(qualLev[j],SIGNAL(pressed()),this,SLOT(qualTriChange()));
+    connect(qualTriBox[j],SIGNAL(pressed()),this,SLOT(qualTriChange()));
+  for (j = 0; j < 3; j++)
+    connect(qualTriBox[j],SIGNAL(pressed()),this,SLOT(qualRampChange()));
 
   for (j = 0; j < MAX_TRACKS; j++)
     { connect(trackBox[j],SIGNAL(pressed()),this,SLOT(trackChange()));
@@ -3709,13 +3740,17 @@ PaletteDialog::PaletteDialog(QWidget *parent) : QDialog(parent)
   connect(matchMidEdit,SIGNAL(editingFinished()),this,SLOT(matchMidCheck()));
   connect(matchMaxEdit,SIGNAL(editingFinished()),this,SLOT(matchMaxCheck()));
   connect(matchStrideEdit,SIGNAL(editingFinished()),this,SLOT(matchStrideCheck()));
-  matchRampRadio->setChecked(true);
+  matchQualRadio->setChecked(true);
 
   connect(qualOpt,SIGNAL(buttonClicked(int)),qualStack,SLOT(setCurrentIndex(int)));
-  connect(qualBot,SIGNAL(editingFinished()),this,SLOT(qualGoodCheck()));
-  connect(qualTop,SIGNAL(editingFinished()),this,SLOT(qualBadCheck()));
+  connect(qualQualBoxes,SIGNAL(currentIndexChanged(int)),this,SLOT(qualBoxChange(int)));
+  connect(qualGoodEdit,SIGNAL(editingFinished()),this,SLOT(qualGoodCheck()));
+  connect(qualBadEdit,SIGNAL(editingFinished()),this,SLOT(qualBadCheck()));
+  connect(qualMidEdit,SIGNAL(editingFinished()),this,SLOT(qualMidCheck()));
+  connect(qualMaxEdit,SIGNAL(editingFinished()),this,SLOT(qualMaxCheck()));
+  connect(qualStrideEdit,SIGNAL(editingFinished()),this,SLOT(qualStrideCheck()));
   connect(qualonB,SIGNAL(stateChanged(int)),this,SLOT(enforceMatchOff(int)));
-  qualRadioScale->setChecked(true);
+  qualQualRadio->setChecked(true);
 }
 
 void PaletteDialog::readAndApplySettings(QSettings &settings)
@@ -3726,10 +3761,9 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
   QRgb matchQual[10];
   QRgb matchTri[3];
   QRgb matchRamp[3];
-  QRgb qualRGB[10];
+  QRgb qualQual[10];
   QRgb qualTri[3];
-  QRgb profRGB[10];
-  QRgb profTri[3];
+  QRgb qualRamp[3];
   int  j;
 
   settings.beginGroup("palette");
@@ -3763,30 +3797,24 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
     matchRamp[1] = settings.value("matchR1",QColor(255,0,0).rgb()).toUInt();
     matchRamp[2] = settings.value("matchR2",QColor(0,0,255).rgb()).toUInt();
 
-    qualRGB[0] = settings.value("qual0",QColor(221,221,221).rgb()).toUInt();
-    qualRGB[1] = settings.value("qual1",QColor(221,221,221).rgb()).toUInt();
-    qualRGB[2] = settings.value("qual2",QColor(221,221,221).rgb()).toUInt();
-    qualRGB[3] = settings.value("qual3",QColor(221,221,221).rgb()).toUInt();
-    qualRGB[4] = settings.value("qual4",QColor(221,221,221).rgb()).toUInt();
-    qualRGB[5] = settings.value("qual5",QColor(255,221,0).rgb()).toUInt();
-    qualRGB[6] = settings.value("qual6",QColor(255,170,68).rgb()).toUInt();
-    qualRGB[7] = settings.value("qual7",QColor(255,68,68).rgb()).toUInt();
-    qualRGB[8] = settings.value("qual8",QColor(204,68,221).rgb()).toUInt();
-    qualRGB[9] = settings.value("qual9",QColor(204,68,221).rgb()).toUInt();
+    qualQual[0] = settings.value("qual0",QColor(221,221,221).rgb()).toUInt();
+    qualQual[1] = settings.value("qual1",QColor(221,221,221).rgb()).toUInt();
+    qualQual[2] = settings.value("qual2",QColor(221,221,221).rgb()).toUInt();
+    qualQual[3] = settings.value("qual3",QColor(221,221,221).rgb()).toUInt();
+    qualQual[4] = settings.value("qual4",QColor(221,221,221).rgb()).toUInt();
+    qualQual[5] = settings.value("qual5",QColor(255,221,0).rgb()).toUInt();
+    qualQual[6] = settings.value("qual6",QColor(255,170,68).rgb()).toUInt();
+    qualQual[7] = settings.value("qual7",QColor(255,68,68).rgb()).toUInt();
+    qualQual[8] = settings.value("qual8",QColor(204,68,221).rgb()).toUInt();
+    qualQual[9] = settings.value("qual9",QColor(204,68,221).rgb()).toUInt();
 
-    qualTri[0] = settings.value("qualLow",QColor(100,255,100).rgb()).toUInt();
-    qualTri[1] = settings.value("qualMid",QColor(255,255,100).rgb()).toUInt();
-    qualTri[2] = settings.value("qualHgh",QColor(255,100,100).rgb()).toUInt();
+    qualTri[0] = settings.value("qualT0",QColor(100,255,100).rgb()).toUInt();
+    qualTri[1] = settings.value("qualT1",QColor(255,255,100).rgb()).toUInt();
+    qualTri[2] = settings.value("qualT2",QColor(255,100,100).rgb()).toUInt();
 
-    profRGB[0] = settings.value("prof0",QColor(205,255,255).rgb()).toUInt();
-    profRGB[1] = settings.value("prof1",QColor(155,225,225).rgb()).toUInt();
-    profRGB[2] = settings.value("prof2",QColor(105,195,195).rgb()).toUInt();
-    profRGB[3] = settings.value("prof3",QColor( 55,165,165).rgb()).toUInt();
-    profRGB[4] = settings.value("prof4",QColor(  5,135,135).rgb()).toUInt();
-
-    profTri[0] = settings.value("profGood",QColor(205,255,255).rgb()).toUInt();
-    profTri[1] = settings.value("profMid",QColor(105,195,195).rgb()).toUInt();
-    profTri[2] = settings.value("profBad",QColor(  5,135,135).rgb()).toUInt();
+    qualRamp[0] = settings.value("qualR0",QColor(255,255,255).rgb()).toUInt();
+    qualRamp[1] = settings.value("qualR1",QColor(255,0,0).rgb()).toUInt();
+    qualRamp[2] = settings.value("qualR2",QColor(0,0,255).rgb()).toUInt();
 
     state.showGrid    = settings.value("showG",false).toBool();
     state.showHalo    = settings.value("showH",false).toBool();
@@ -3809,6 +3837,10 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
     state.qualMode   = settings.value("qualMode",0).toInt();
     state.qualGood   = settings.value("qualGood",23).toInt();
     state.qualBad    = settings.value("qualBad",27).toInt();
+    state.qualMid    = settings.value("qualMid",20).toInt();
+    state.qualMax    = settings.value("qualMax",35).toInt();
+    state.qualStride = settings.value("qualStride",5).toInt();
+    state.qualBoxes  = settings.value("qualBoxes",10).toInt();
     state.qualonB    = settings.value("qualonB",false).toInt();
   settings.endGroup();
 
@@ -3829,9 +3861,11 @@ void PaletteDialog::readAndApplySettings(QSettings &settings)
   for (j = 0; j < 3; j++)
     state.matchRampColor[j].setRgb(matchRamp[j]);
   for (j = 0; j < 10; j++)
-    state.qualColor[j].setRgb(qualRGB[j]);
+    state.qualQualColor[j].setRgb(qualQual[j]);
   for (j = 0; j < 3; j++)
-    state.qualHue[j].setRgb(qualTri[j]);
+    state.qualTriColor[j].setRgb(qualTri[j]);
+  for (j = 0; j < 3; j++)
+    state.qualRampColor[j].setRgb(qualRamp[j]);
 
   if (state.elimColor == black)
     state.drawElim = -1;
@@ -3907,13 +3941,18 @@ void PaletteDialog::writeSettings(QSettings &settings)
 
     settings.setValue("qualQV", qualCheck->isChecked());
     for (j = 0; j < 10; j++)
-      settings.setValue(tr("qual%1").arg(j),qualColor[j].rgb());
-    settings.setValue(tr("qualLow"),qualHue[0].rgb());
-    settings.setValue(tr("qualMid"),qualHue[1].rgb());
-    settings.setValue(tr("qualHgh"),qualHue[2].rgb());
-    settings.setValue("qualMode", qualRadioTri->isChecked());
+      settings.setValue(tr("qual%1").arg(j),qualQualColor[j].rgb());
+    for (j = 0; j < 3; j++)
+      settings.setValue(tr("qualT%1").arg(j),qualTriColor[j].rgb());
+    for (j = 0; j < 3; j++)
+      settings.setValue(tr("qualR%1").arg(j),qualRampColor[j].rgb());
+    settings.setValue("qualMode", qualTriRadio->isChecked());
     settings.setValue("qualGood", qualGood);
     settings.setValue("qualBad", qualBad);
+    settings.setValue("qualMid", qualMid);
+    settings.setValue("qualMax", qualMax);
+    settings.setValue("qualStride", qualStride);
+    settings.setValue("qualBoxes", qualQualBoxes->currentIndex());
     settings.setValue("qualonB", qualonB->isChecked());
 
     for (j = 0; j < nmasks; j++)
@@ -3986,34 +4025,45 @@ bool PaletteDialog::readView(Palette_State &state, QString &view)
       state.matchTriColor[j].setRgb(settings.value(tr("matchT%1").arg(j)).toUInt());
     for (j = 0; j < 3; j++)
       state.matchRampColor[j].setRgb(settings.value(tr("matchR%1").arg(j)).toUInt());
+    state.matchStride = settings.value("matchStride").toInt();
     state.matchGood   = settings.value("matchGood").toInt();
     state.matchBad    = settings.value("matchBad").toInt();
     state.matchMid    = settings.value("matchMid").toInt();
     state.matchMax    = settings.value("matchMax").toInt();
-    state.matchStride = settings.value("matchStride").toInt();
     state.matchBoxes  = settings.value("matchBoxes").toInt();
 
     if (settings.value("qualVis").toBool())
       { state.qualqv   = settings.value("qualQV").toBool();
         state.qualMode = settings.value("qualMode").toInt();
         for (j = 0; j < 10; j++)
-          state.qualColor[j].setRgb(settings.value(tr("qual%1").arg(j)).toUInt());
-        state.qualHue[0].setRgb(settings.value("qualLow").toUInt());
-        state.qualHue[1].setRgb(settings.value("qualMid").toUInt());
-        state.qualHue[2].setRgb(settings.value("qualHgh").toUInt());
-        state.qualGood = settings.value("qualGood").toInt();
-        state.qualBad  = settings.value("qualBad").toInt();
-        state.qualonB  = settings.value("qualonB").toInt();
+          state.qualQualColor[j].setRgb(settings.value(tr("qual%1").arg(j)).toUInt());
+        for (j = 0; j < 3; j++)
+          state.qualTriColor[j].setRgb(settings.value(tr("qualT%1").arg(j)).toUInt());
+        for (j = 0; j < 3; j++)
+          state.qualRampColor[j].setRgb(settings.value(tr("qualR%1").arg(j)).toUInt());
+        state.qualStride = settings.value("qualStride").toInt();
+        state.qualGood   = settings.value("qualGood").toInt();
+        state.qualBad    = settings.value("qualBad").toInt();
+        state.qualMid    = settings.value("qualMid").toInt();
+        state.qualMax    = settings.value("qualMax").toInt();
+        state.qualonB    = settings.value("qualonB").toInt();
+        state.qualBoxes  = settings.value("qualBoxes").toInt();
       }
     else
       { state.qualqv        = qualCheck->isChecked();
-        state.qualMode      = qualRadioTri->isChecked();
+        state.qualMode      = qualTriRadio->isChecked();
         for (j = 0; j < 10; j++)
-          state.qualColor[j] = qualColor[j];
+          state.qualQualColor[j] = qualQualColor[j];
         for (j = 0; j < 3; j++)
-          state.qualHue[j] = qualHue[j];
+          state.qualTriColor[j] = qualTriColor[j];
+        for (j = 0; j < 3; j++)
+          state.qualRampColor[j] = qualRampColor[j];
+        state.qualStride    = qualStride;
         state.qualGood      = qualGood;
         state.qualBad       = qualBad;
+        state.qualMid       = qualMid;
+        state.qualMax       = qualMax;
+        state.qualBoxes     = qualBoxes;
         state.qualonB       = qualonB->isChecked();
       }
     state.qualVis = qualVis;
@@ -4112,13 +4162,18 @@ void PaletteDialog::writeView(Palette_State &state, QString &view)
     settings.setValue("qualQV",state.qualqv);
     settings.setValue("qualMode",state.qualMode);
     for (j = 0; j < 10; j++)
-      settings.setValue(tr("qual%1").arg(j),state.qualColor[j].rgb());
-    settings.setValue(tr("qualLow"),state.qualHue[0].rgb());
-    settings.setValue(tr("qualMid"),state.qualHue[1].rgb());
-    settings.setValue(tr("qualHgh"),state.qualHue[2].rgb());
+      settings.setValue(tr("qual%1").arg(j),state.qualQualColor[j].rgb());
+    for (j = 0; j < 3; j++)
+      settings.setValue(tr("qualT%1").arg(j),state.qualTriColor[j].rgb());
+    for (j = 0; j < 3; j++)
+      settings.setValue(tr("qualR%1").arg(j),state.qualRampColor[j].rgb());
     settings.setValue("qualGood", state.qualGood);
     settings.setValue("qualBad", state.qualBad);
     settings.setValue("qualonB", state.qualonB);
+    settings.setValue("qualMid",state.qualMid);
+    settings.setValue("qualMax",state.qualMax);
+    settings.setValue("qualStride",state.qualStride);
+    settings.setValue("qualBoxes",state.qualBoxes);
 
     settings.setValue("nmasks",state.nmasks);
     for (j = 0; j < state.nmasks; j++)
