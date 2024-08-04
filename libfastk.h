@@ -48,7 +48,7 @@ typedef struct
     int     minval;       //  The minimum count of a k-mer in the table
     int64   nels;         //  # of unique, sorted k-mers in the table
 
-    void   *hidden[7];   //  Private fields
+    void   *hidden[7];    //  Private fields
   } Kmer_Table;
 
 Kmer_Table *Load_Kmer_Table(char *name, int cut_off);

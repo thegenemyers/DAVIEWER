@@ -2192,6 +2192,7 @@ BUILD/prof_window.o: prof_window.cpp ../../../../Qt/5.14.1/clang_64/lib/QtGui.fr
 		QV.h \
 		libfastk.h \
 		piler.h \
+		doter.h \
 		prof_window.h \
 		../../../../Qt/5.14.1/clang_64/lib/QtWidgets.framework/Headers/QtWidgets \
 		../../../../Qt/5.14.1/clang_64/lib/QtWidgets.framework/Headers/qtwidgetsglobal.h \
